@@ -56,6 +56,7 @@ fn server() -> McpServer {
         transport: McpTransport::Http {
             url: "http://localhost".into(),
             token_env: None,
+            allow_insecure: false,
         },
     }
 }

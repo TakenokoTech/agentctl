@@ -9,7 +9,8 @@ use clap::{Parser, Subcommand};
 /// `a2a <agent> card` -> `a2a <agent> send <text>`.
 ///
 /// Output is JSON on stdout (except `list` and `tools`, which are TSV).
-/// Exit codes: 0 ok, 1 error (config/transport/protocol), 2 tool error or task failed.
+/// Exit codes: 0 ok, 1 error (config/transport/protocol), 2 tool error or task failed,
+/// 64 invalid command line.
 #[derive(Parser)]
 #[command(name = "agentctl", version, verbatim_doc_comment)]
 pub struct Cli {

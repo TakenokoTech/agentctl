@@ -172,3 +172,11 @@ fn watch_exit_is_an_error_when_the_stream_closed_early() {
         "stream closed before the task finished (last state: none)"
     );
 }
+
+#[test]
+fn watch_exit_treats_a_stream_closed_while_waiting_for_input_as_settled() {
+    for name in ["input_required", "auth_required"] {
+        let end = WatchEnd::Interrupted(Some(TaskState::new(name)));
+        assert_eq!(watch_exit(end).unwrap(), ExitCode::SUCCESS, "{name}");
+    }
+}

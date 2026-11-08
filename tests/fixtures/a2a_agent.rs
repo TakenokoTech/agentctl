@@ -16,7 +16,18 @@ use std::{
 };
 #[derive(Clone, Default)]
 pub struct TestAgent {
+    /// カードが広告するエンドポイントの接頭辞。空なら相対 URL。
+    advertised_origin: String,
     tasks: Arc<Mutex<HashMap<String, Task>>>,
+}
+impl TestAgent {
+    /// カードが `origin` のエンドポイントを広告するエージェント。
+    pub fn advertising(origin: &str) -> Self {
+        Self {
+            advertised_origin: origin.to_owned(),
+            ..Self::default()
+        }
+    }
 }
 fn text_part(s: &str) -> Part {
     Part {
@@ -64,7 +75,10 @@ impl A2AHandler for TestAgent {
         Ok(AgentCard {
             name: "Test Agent".to_owned(),
             description: "Echoes text. Prefix with 'slow' to get a long-running task.".to_owned(),
-            supported_interfaces: vec![iface("/", "HTTP+JSON"), iface("/rpc", "JSONRPC")],
+            supported_interfaces: vec![
+                iface(&format!("{}/", self.advertised_origin), "HTTP+JSON"),
+                iface(&format!("{}/rpc", self.advertised_origin), "JSONRPC"),
+            ],
             provider: None,
             version: "0.1.0".to_owned(),
             documentation_url: None,

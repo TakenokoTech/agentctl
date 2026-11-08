@@ -24,6 +24,7 @@ async fn watch_reports_a_connect_timeout_with_the_flag_hint() {
         url: "http://192.0.2.1:9".into(),
         description: None,
         token_env: None,
+        allow_insecure: false,
     };
     let session = A2aRustConnector::new(Some(Duration::from_millis(300)))
         .connect(&agent)
@@ -42,4 +43,50 @@ async fn watch_reports_a_connect_timeout_with_the_flag_hint() {
         msg.contains("timed out after 300ms (change it with --timeout)"),
         "{msg}"
     );
+}
+
+#[test]
+fn authorization_header_is_marked_sensitive() {
+    let headers = auth_headers(Some("s3cret".into())).unwrap();
+    assert!(headers[AUTHORIZATION].is_sensitive());
+    assert!(!format!("{headers:?}").contains("s3cret"));
+}
+
+fn interface(url: &str, binding: &str) -> AgentInterface {
+    AgentInterface {
+        url: url.into(),
+        protocol_binding: binding.into(),
+        tenant: None,
+        protocol_version: "1.0".into(),
+    }
+}
+
+#[test]
+fn endpoints_on_the_configured_origin_are_accepted() {
+    let interfaces = [
+        interface("/", "HTTP+JSON"),
+        interface("rpc", "JSONRPC"),
+        interface("https://agent.example.com:443/v1", "jsonrpc"),
+    ];
+    assert!(ensure_same_origin("https://agent.example.com/base", &interfaces).is_ok());
+}
+
+#[test]
+fn an_endpoint_on_another_origin_is_rejected() {
+    for url in [
+        "https://evil.example.net/",
+        "http://agent.example.com/",
+        "https://agent.example.com:8443/",
+    ] {
+        let err = ensure_same_origin("https://agent.example.com", &[interface(url, "JSONRPC")])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("different origin"), "{url}: {err}");
+    }
+}
+
+#[test]
+fn bindings_the_client_does_not_use_are_not_checked() {
+    let interfaces = [interface("https://other.example.net", "GRPC")];
+    assert!(ensure_same_origin("https://agent.example.com", &interfaces).is_ok());
 }

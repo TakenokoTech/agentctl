@@ -14,7 +14,7 @@ use tokio::process::Command;
 
 use crate::domain::config::{McpServer, McpTransport};
 use crate::domain::mcp::{Content, JsonObject, McpConnector, McpSession, ToolInfo, ToolOutput};
-use crate::infrastructure::config::read_token;
+use crate::infrastructure::config::{ensure_secure_transport, read_token};
 use crate::infrastructure::timeout::within;
 use stderr_tail::StderrTail;
 
@@ -60,9 +60,14 @@ impl McpConnector for RmcpConnector {
                     (Err(e), None) => return Err(e),
                 }
             }
-            McpTransport::Http { url, token_env } => {
+            McpTransport::Http {
+                url,
+                token_env,
+                allow_insecure,
+            } => {
                 let mut cfg = StreamableHttpClientTransportConfig::with_uri(url.as_str());
                 if let Some(token) = read_token(token_env)? {
+                    ensure_secure_transport(url, true, *allow_insecure)?;
                     cfg = cfg.auth_header(token);
                 }
                 within(self.timeout, "connecting to the MCP server", async {

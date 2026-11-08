@@ -15,6 +15,18 @@ use cli::{Cli, Cmd};
 /// tool がエラーを返した / task が failed・rejected になった場合の終了コード。
 pub const EXIT_TOOL_FAILED: u8 = 2;
 
+/// コマンドラインの使い方が正しくない場合の終了コード(sysexits の `EX_USAGE`)。
+pub const EXIT_USAGE: u8 = 64;
+
+/// 引数の解析エラーの終了コード。`--help` と `--version` は成功(0)のまま。
+pub fn usage_exit_code(e: &clap::Error) -> ExitCode {
+    if e.use_stderr() {
+        ExitCode::from(EXIT_USAGE)
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
 pub async fn run<M: McpConnector, A: A2aConnector>(
     cli: Cli,
     cfg: &Config,

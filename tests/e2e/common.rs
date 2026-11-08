@@ -82,6 +82,17 @@ pub fn a2a_url() -> &'static str {
     })
 }
 
+/// `origin` のエンドポイントを広告するエージェントカードの JSON。
+pub fn card_advertising(origin: &str) -> String {
+    use a2a_rust::server::A2AHandler;
+    let agent = TestAgent::advertising(origin);
+    let card = tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(agent.get_agent_card())
+        .unwrap();
+    serde_json::to_string(&card).unwrap()
+}
+
 /// MCP(`test`)と A2A(`test`)を登録した標準の設定。
 pub fn config() -> &'static Path {
     static CONFIG: OnceLock<PathBuf> = OnceLock::new();

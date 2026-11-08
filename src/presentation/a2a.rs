@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -60,11 +60,13 @@ pub async fn run<C: A2aConnector>(
     }
 }
 
-/// 終端状態に達したら、その状態に応じた終了コード。達する前にストリームが閉じたらエラー(終了コード 1)。
+/// 終端状態に達したら、その状態に応じた終了コード。達する前にストリームが閉じたら、
+/// 入力待ちなどでサーバーがストリームを閉じた場合(`is_settled`)を除き、エラー(終了コード 1)。
 fn watch_exit(end: WatchEnd) -> Result<ExitCode> {
     match end {
         WatchEnd::Finished(state) => Ok(exit_code(&state)),
-        WatchEnd::Interrupted(last) => anyhow::bail!(
+        WatchEnd::Interrupted(Some(state)) if state.is_settled() => Ok(exit_code(&state)),
+        WatchEnd::Interrupted(last) => bail!(
             "stream closed before the task finished (last state: {})",
             last.as_ref().map_or("none", |s| s.name())
         ),

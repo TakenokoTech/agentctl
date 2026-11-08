@@ -29,6 +29,8 @@ pub enum McpTransport {
     Http {
         url: String,
         token_env: Option<String>,
+        /// 平文の HTTP でもトークンを送ることを許す。
+        allow_insecure: bool,
     },
 }
 
@@ -43,6 +45,7 @@ struct RawMcpServer {
     env: Option<BTreeMap<String, String>>,
     url: Option<String>,
     token_env: Option<String>,
+    allow_insecure: Option<bool>,
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -84,6 +87,7 @@ impl TryFrom<RawMcpServer> for McpServer {
             TransportKind::Stdio => {
                 reject(kind, "url", &raw.url)?;
                 reject(kind, "token_env", &raw.token_env)?;
+                reject(kind, "allow_insecure", &raw.allow_insecure)?;
                 McpTransport::Stdio {
                     command: require(kind, "command", raw.command)?,
                     env: raw.env.unwrap_or_default(),
@@ -95,6 +99,7 @@ impl TryFrom<RawMcpServer> for McpServer {
                 McpTransport::Http {
                     url: require(kind, "url", raw.url)?,
                     token_env: raw.token_env,
+                    allow_insecure: raw.allow_insecure.unwrap_or(false),
                 }
             }
         };
@@ -111,6 +116,9 @@ pub struct A2aAgent {
     pub url: String,
     pub description: Option<String>,
     pub token_env: Option<String>,
+    /// 平文の HTTP でもトークンを送ることを許す。
+    #[serde(default)]
+    pub allow_insecure: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

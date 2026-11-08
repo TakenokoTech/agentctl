@@ -43,7 +43,7 @@ fn invalid_config_exits_1() {
 #[test]
 fn unknown_subcommand_is_a_usage_error() {
     let out = run(&["nope"]);
-    assert_eq!(out.code, 2);
+    assert_eq!(out.code, 64);
     assert!(out.stdout.is_empty());
 }
 
@@ -232,4 +232,13 @@ fn a_working_stdio_server_does_not_leak_its_stderr() {
     let out = run(&["mcp", "test", "tools"]);
     assert_eq!(out.code, 0, "{}", out.stderr);
     assert!(out.stderr.is_empty(), "{}", out.stderr);
+}
+
+#[test]
+fn help_and_version_exit_0() {
+    for flag in ["--help", "--version"] {
+        let out = run(&[flag]);
+        assert_eq!(out.code, 0, "{flag}");
+        assert!(!out.stdout.is_empty(), "{flag}");
+    }
 }
