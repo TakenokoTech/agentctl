@@ -90,7 +90,7 @@ Use `agentctl` to reach external tools and agents.
 1. `agentctl list` shows what is available.
 2. `agentctl mcp <server> tools`, then `agentctl mcp <server> schema <tool>`, then `agentctl mcp <server> call <tool> --args '<json>'`.
 3. `agentctl a2a <agent> card`, then `agentctl a2a <agent> send "<text>"`.
-Exit code 2 means the tool or task itself failed; 1 means the call could not be made. The argument parser also exits with 2 when the command line is invalid, so check stderr for a usage error before treating 2 as a tool failure.
+Exit code 2 means the tool or task itself failed; 1 means the call could not be made; 64 means the command line was invalid.
 ```
 
 ## Manual
