@@ -184,21 +184,36 @@ fn event_info_maps_every_stream_response() {
     }
 }
 
+/// 期待する短い名前と、失敗かどうか。網羅的な `match` なので、ライブラリに状態が増えるとコンパイルが通らなくなる
+fn expected(wire: &WireState) -> (&'static str, bool) {
+    match wire {
+        WireState::Unspecified => ("unspecified", false),
+        WireState::Submitted => ("submitted", false),
+        WireState::Working => ("working", false),
+        WireState::Completed => ("completed", false),
+        WireState::Failed => ("failed", true),
+        WireState::Canceled => ("canceled", false),
+        WireState::InputRequired => ("input_required", false),
+        WireState::Rejected => ("rejected", true),
+        WireState::AuthRequired => ("auth_required", false),
+    }
+}
+
 #[test]
 fn every_wire_state_maps_to_its_short_name_and_only_failures_fail() {
-    // ライブラリの状態が増えたら、このテストが落ちて気づける
-    let expected = [
-        (WireState::Unspecified, "unspecified", false),
-        (WireState::Submitted, "submitted", false),
-        (WireState::Working, "working", false),
-        (WireState::Completed, "completed", false),
-        (WireState::Failed, "failed", true),
-        (WireState::Canceled, "canceled", false),
-        (WireState::InputRequired, "input_required", false),
-        (WireState::Rejected, "rejected", true),
-        (WireState::AuthRequired, "auth_required", false),
+    let all = [
+        WireState::Unspecified,
+        WireState::Submitted,
+        WireState::Working,
+        WireState::Completed,
+        WireState::Failed,
+        WireState::Canceled,
+        WireState::InputRequired,
+        WireState::Rejected,
+        WireState::AuthRequired,
     ];
-    for (wire, name, failure) in expected {
+    for wire in all {
+        let (name, failure) = expected(&wire);
         let state = state_info(&wire);
         assert_eq!(state.name(), name, "{wire:?}");
         assert_eq!(state.is_failure(), failure, "{wire:?}");
