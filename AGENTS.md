@@ -27,3 +27,4 @@ git config core.hooksPath .agent/hooks
 
 - `.mcp.json` はチーム共有用。個人用の MCP サーバーは `claude mcp add --scope local` で登録し、`.mcp.json` には書かない。
 - 依頼されていない付随ファイル(サンプル設定など)は追加しない。必要だと考えたら、追加せずに提案する。
+- 大きなコミット(新機能、複数ファイル、設計に関わる変更)の前には、`/pre-commit-review` を実行するか確認する。スキルはユーザーが呼ぶもので、自動では実行しない。
