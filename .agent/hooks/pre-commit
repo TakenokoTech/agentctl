@@ -7,15 +7,13 @@
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
-# ワークツリーごとに別の場所になる。複数のセッションが同時にコミットしても衝突しない
-snapshot="$(git rev-parse --absolute-git-dir)/pre-commit-snapshot"
-# `git commit <paths>` などでは、フックに専用のインデックスが渡される
-tree=$(git write-tree)
-
-rm -rf "$snapshot"
-mkdir -p "$snapshot"
+# 実行ごとに別のディレクトリにする。Git はフックの実行中にインデックスをロックしないので、
+# 同じワークツリーで複数のフックが重なっても、互いの取り出し先を消さない
+snapshot=$(mktemp -d "$(git rev-parse --absolute-git-dir)/pre-commit-snapshot.XXXXXX")
 trap 'rm -rf "$snapshot"' EXIT
-git archive "$tree" | tar -x -C "$snapshot"
+# インデックスの内容をそのまま取り出す(`git archive` は export-ignore のファイルを除く)。
+# `git commit <paths>` などでは、フックに専用のインデックスが渡され、それに従う
+git checkout-index --all --prefix="$snapshot/"
 
 # 取り出した先は Git のリポジトリではない。フックの環境変数が残っていると、cargo などが混乱する
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE

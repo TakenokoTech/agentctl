@@ -157,10 +157,17 @@ fn it_does_not_touch_the_working_tree() {
         fs::read_to_string(dir.join("notes.txt")).unwrap(),
         "未追跡のファイル\n"
     );
-    assert!(
-        !dir.join(".git/pre-commit-snapshot").exists(),
-        "取り出したディレクトリを残さない"
-    );
+    let leftovers = fs::read_dir(dir.join(".git"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("pre-commit-snapshot")
+        })
+        .count();
+    assert_eq!(leftovers, 0, "取り出したディレクトリを残さない");
 }
 
 #[test]
@@ -192,6 +199,40 @@ fn it_fails_on_a_stale_lock_file_even_if_the_architecture_check_would_update_it(
         "古い Cargo.lock がコミットされてしまう: {}",
         text(&out)
     );
+}
+
+#[test]
+fn it_checks_files_marked_export_ignore() {
+    // `git archive` は export-ignore のファイルを取り出さない。コミットされる内容は、そのまま検査する
+    let dir = new_repo("export-ignore");
+    write(&dir, ".gitattributes", "src/main.rs export-ignore\n");
+    ok(&dir, "git", &["add", ".gitattributes"]);
+
+    let out = hook(&dir, &[]);
+    assert!(out.status.success(), "{}", text(&out));
+}
+
+#[test]
+fn it_lets_two_hooks_run_in_the_same_worktree_at_once() {
+    // Git は、フックの実行中にインデックスをロックしない。同じワークツリーで、フックが重なることがある
+    let dir = new_repo("concurrent");
+    write(
+        &dir,
+        ".agent/architecture/check.sh",
+        "#!/usr/bin/env bash\nsleep 2\ntest -f src/main.rs\n",
+    );
+    executable(&dir.join(".agent/architecture/check.sh"));
+
+    let first = std::thread::spawn({
+        let dir = dir.clone();
+        move || hook(&dir, &[])
+    });
+    std::thread::sleep(std::time::Duration::from_millis(700));
+    let second = hook(&dir, &[]);
+    let first = first.join().expect("スレッドが終わる");
+
+    assert!(first.status.success(), "1つ目: {}", text(&first));
+    assert!(second.status.success(), "2つ目: {}", text(&second));
 }
 
 #[test]
