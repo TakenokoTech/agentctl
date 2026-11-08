@@ -1,9 +1,9 @@
 use a2a_rust::{
     A2AClient, A2AClientConfig,
     types::{
-        CancelTaskRequest, GetTaskRequest, Message, Part, Role, SendMessageConfiguration,
-        SendMessageRequest, SendMessageResponse, StreamResponse, SubscribeToTaskRequest, Task,
-        TaskState as WireState,
+        AgentInterface, CancelTaskRequest, GetTaskRequest, Message, Part, Role,
+        SendMessageConfiguration, SendMessageRequest, SendMessageResponse, StreamResponse,
+        SubscribeToTaskRequest, Task, TaskState as WireState,
     },
 };
 use anyhow::Result;
@@ -19,28 +19,63 @@ use crate::infrastructure::config::{ensure_secure_transport, read_token};
 
 pub struct A2aRustConnector;
 
-pub struct A2aRustSession(A2AClient);
+pub struct A2aRustSession {
+    client: A2AClient,
+    /// トークンを持つときだけ、送信先を縛る基準になる設定済みの URL。
+    token_origin: Option<String>,
+}
 
 impl A2aConnector for A2aRustConnector {
     type Session = A2aRustSession;
 
     fn connect(&self, agent: &A2aAgent) -> Result<A2aRustSession> {
         let token = read_token(&agent.token_env)?;
-        ensure_secure_transport(&agent.url, token.is_some(), agent.allow_insecure)?;
+        let has_token = token.is_some();
+        ensure_secure_transport(&agent.url, has_token, agent.allow_insecure)?;
         let http = reqwest::Client::builder()
             .default_headers(auth_headers(token)?)
             .build()?;
-        Ok(A2aRustSession(A2AClient::with_http_client(
-            &agent.url,
-            http,
-            A2AClientConfig::default(),
-        )?))
+        Ok(A2aRustSession {
+            client: A2AClient::with_http_client(&agent.url, http, A2AClientConfig::default())?,
+            token_origin: has_token.then(|| agent.url.clone()),
+        })
     }
+}
+
+impl A2aRustSession {
+    /// トークンを持つとき、カードが広告するエンドポイントが設定した URL と同じオリジンか確かめる。
+    /// カードはクライアント内にキャッシュされ、続く送信先の選択も同じカードを使う。
+    async fn guard_token_origin(&self) -> Result<()> {
+        if let Some(base) = &self.token_origin {
+            let card = self.client.discover_agent_card().await?;
+            ensure_same_origin(base, &card.supported_interfaces)?;
+        }
+        Ok(())
+    }
+}
+
+/// クライアントが使うバインディングのエンドポイントが、すべて `base` と同じオリジンにあるか。
+fn ensure_same_origin(base: &str, interfaces: &[AgentInterface]) -> Result<()> {
+    let base = reqwest::Url::parse(base)?;
+    for i in interfaces {
+        let binding = i.protocol_binding.as_str();
+        if !(binding.eq_ignore_ascii_case("JSONRPC") || binding.eq_ignore_ascii_case("HTTP+JSON")) {
+            continue;
+        }
+        let url = reqwest::Url::parse(&i.url).or_else(|_| base.join(&i.url))?;
+        if url.origin() != base.origin() {
+            anyhow::bail!(
+                "the agent card advertises an endpoint on a different origin ({url}); \
+                 refusing to send the token there"
+            );
+        }
+    }
+    Ok(())
 }
 
 impl A2aSession for A2aRustSession {
     async fn card(&self) -> Result<AgentCard> {
-        let card = self.0.discover_agent_card().await?;
+        let card = self.client.discover_agent_card().await?;
         Ok(AgentCard {
             name: card.name.clone(),
             description: card.description.clone(),
@@ -59,6 +94,7 @@ impl A2aSession for A2aRustSession {
     }
 
     async fn send(&self, req: SendRequest) -> Result<Reply> {
+        self.guard_token_origin().await?;
         let req = SendMessageRequest {
             message: user_message(req.text, req.context_id, req.task_id),
             configuration: Some(SendMessageConfiguration {
@@ -68,33 +104,36 @@ impl A2aSession for A2aRustSession {
             metadata: None,
             tenant: None,
         };
-        Ok(match self.0.send_message(req).await? {
+        Ok(match self.client.send_message(req).await? {
             SendMessageResponse::Message(m) => Reply::Message(message_info(&m)?),
             SendMessageResponse::Task(t) => Reply::Task(task_info(&t)?),
         })
     }
 
     async fn get_task(&self, id: &str) -> Result<TaskInfo> {
+        self.guard_token_origin().await?;
         let req = GetTaskRequest {
             id: id.to_owned(),
             history_length: None,
             tenant: None,
         };
-        task_info(&self.0.get_task(req).await?)
+        task_info(&self.client.get_task(req).await?)
     }
 
     async fn cancel_task(&self, id: &str) -> Result<TaskInfo> {
+        self.guard_token_origin().await?;
         let req = CancelTaskRequest {
             id: id.to_owned(),
             tenant: None,
             metadata: None,
         };
-        task_info(&self.0.cancel_task(req).await?)
+        task_info(&self.client.cancel_task(req).await?)
     }
 
     async fn watch(&self, id: &str) -> Result<EventStream> {
+        self.guard_token_origin().await?;
         let stream = self
-            .0
+            .client
             .subscribe_to_task(SubscribeToTaskRequest {
                 id: id.to_owned(),
                 tenant: None,

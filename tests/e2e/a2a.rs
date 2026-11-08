@@ -204,3 +204,56 @@ fn a2a_refuses_to_send_a_token_over_plain_http_to_a_remote_host() {
     assert_eq!(out.code, 1);
     assert!(out.stderr.contains("allow_insecure"), "{}", out.stderr);
 }
+
+#[test]
+fn a2a_does_not_send_the_token_to_an_endpoint_on_another_origin() {
+    let card = crate::common::card_advertising("http://other.invalid:1");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let mut stream = stream.unwrap();
+            let mut request = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = stream.read(&mut buf).unwrap();
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buf[..n]);
+            }
+            let line = String::from_utf8_lossy(&request);
+            tx.send(line.lines().next().unwrap_or("").to_owned()).ok();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{card}",
+                card.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        }
+    });
+
+    let path = write_config(
+        "cross-origin",
+        &format!("[a2a.t]\nurl = \"http://{addr}\"\ntoken_env = \"AGENTCTL_E2E_TOKEN\"\n"),
+    );
+    let out = finish(
+        command(&path, &["a2a", "t", "send", "hello"])
+            .env("AGENTCTL_E2E_TOKEN", "s3cret")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap(),
+    );
+
+    assert_eq!(out.code, 1, "{}", out.stderr);
+    assert!(out.stderr.contains("different origin"), "{}", out.stderr);
+    let requests: Vec<String> = rx.try_iter().collect();
+    assert!(
+        requests.iter().any(|r| r.starts_with("GET ")),
+        "{requests:?}"
+    );
+    assert!(
+        requests.iter().all(|r| r.starts_with("GET ")),
+        "{requests:?}"
+    );
+}
