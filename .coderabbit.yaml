@@ -13,3 +13,7 @@ reviews:
     # Approve once the review is complete, required threads are resolved and
     # no pre-merge check is failing. Request changes for blocking findings.
     enabled: true
+  # Docstring coverage is not required for this project.
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
