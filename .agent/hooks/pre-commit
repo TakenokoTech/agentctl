@@ -1,10 +1,31 @@
 #!/usr/bin/env bash
 # コミット前の機械検査。1つでも失敗したらコミットを中止する。
+#
+# 検査するのは、作業ツリーではなく、これからコミットされる(ステージ済みの)内容。
+# ステージ済みのツリーを別ディレクトリに取り出して検査するので、作業ツリーは書き換えない。
+# 部分的なステージ(`git add -p`、`git commit <paths>`、`git commit -a`)にも対応する。
 set -euo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+root=$(git rev-parse --show-toplevel)
+# ワークツリーごとに別の場所になる。複数のセッションが同時にコミットしても衝突しない
+snapshot="$(git rev-parse --absolute-git-dir)/pre-commit-snapshot"
+# `git commit <paths>` などでは、フックに専用のインデックスが渡される
+tree=$(git write-tree)
+
+rm -rf "$snapshot"
+mkdir -p "$snapshot"
+trap 'rm -rf "$snapshot"' EXIT
+git archive "$tree" | tar -x -C "$snapshot"
+
+# 取り出した先は Git のリポジトリではない。フックの環境変数が残っていると、cargo などが混乱する
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
+cd "$snapshot"
+
+# 依存のビルド成果物は、作業ツリーの target を使い回す(毎回の全ビルドを避ける)
+export CARGO_TARGET_DIR="$root/target"
 
 .agent/architecture/check.sh
 cargo fmt --check
-cargo clippy --quiet -- -D warnings
-cargo test --quiet
+# ステージ済みの Cargo.lock が Cargo.toml と食い違っていたら、失敗にする
+cargo clippy --quiet --locked -- -D warnings
+cargo test --quiet --locked
