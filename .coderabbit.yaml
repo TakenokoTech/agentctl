@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+
+reviews:
+  # No poem in the summary comment.
+  poem: false
+  auto_review:
+    # Also review PRs whose base is not the default branch (develop),
+    # such as develop -> main and stacked feature/* PRs.
+    base_branches:
+      - ".*"
+  auto_approvals:
+    # Approve once the review is complete, required threads are resolved and
+    # no pre-merge check is failing. Request changes for blocking findings.
+    enabled: true
+  # Docstring coverage is not required for this project.
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
