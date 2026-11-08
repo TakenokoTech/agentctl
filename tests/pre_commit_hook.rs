@@ -174,6 +174,27 @@ fn it_fails_when_the_staged_lock_file_does_not_match_the_manifest() {
 }
 
 #[test]
+fn it_fails_on_a_stale_lock_file_even_if_the_architecture_check_would_update_it() {
+    // 依存検査は `--locked` なしで cargo を動かす。Cargo.lock が古くても、それが書き換えて直してしまう
+    let dir = new_repo("lock-updated-by-check");
+    write(
+        &dir,
+        ".agent/architecture/check.sh",
+        "#!/usr/bin/env bash\ncargo metadata --format-version 1 >/dev/null\n",
+    );
+    executable(&dir.join(".agent/architecture/check.sh"));
+    write(&dir, "Cargo.toml", &manifest("0.1.1"));
+    ok(&dir, "git", &["add", "-A"]); // Cargo.lock は、古いままステージされている
+
+    let out = hook(&dir, &[]);
+    assert!(
+        !out.status.success(),
+        "古い Cargo.lock がコミットされてしまう: {}",
+        text(&out)
+    );
+}
+
+#[test]
 fn it_follows_the_index_that_git_gives_the_hook() {
     // `git commit <paths>` は、フックに専用のインデックスを渡す。本物のインデックスではなく、そちらを見る
     let dir = new_repo("index");

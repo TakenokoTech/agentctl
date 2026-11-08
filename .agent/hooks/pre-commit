@@ -24,8 +24,10 @@ cd "$snapshot"
 # 依存のビルド成果物は、作業ツリーの target を使い回す(毎回の全ビルドを避ける)
 export CARGO_TARGET_DIR="$root/target"
 
+# ステージ済みの Cargo.lock が Cargo.toml と食い違っていたら、失敗にする。
+# 以降の検査より先に行う(`--locked` のない cargo が、取り出した先の Cargo.lock を書き換えてしまうため)
+cargo metadata --locked --format-version 1 >/dev/null
 .agent/architecture/check.sh
 cargo fmt --check
-# ステージ済みの Cargo.lock が Cargo.toml と食い違っていたら、失敗にする
 cargo clippy --quiet --locked -- -D warnings
 cargo test --quiet --locked
