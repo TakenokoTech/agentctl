@@ -7,10 +7,11 @@
 - `README.md`: 入口。インストール、最小のクイックスタート、`docs/` へのリンクだけを書く。
 - `docs/index.md`: 紹介ページ。特徴、実行例、AI エージェントからの使い方。
 - `docs/manual/`: マニュアル。使い方、設定、リファレンス、開発。
+- `docs/adr/`: 意思決定の記録(ADR)。書き方は `.agent/decision/SKILL.md` と `docs/adr/template.md` に従う。
 
 ## 言語
 
-- 日本語版は `README.ja.md` と `docs/ja/index.md` だけ。マニュアルは英語のみ。
+- 日本語版は `README.ja.md` と `docs/ja/index.md` だけ。マニュアルは英語のみ。ADR は日本語のみ。
 - 英語版を変えたら、対応する日本語版にも同じ変更を入れる(`README.md` と `README.ja.md`、`docs/index.md` と `docs/ja/index.md`)。
 - コマンドとエラーメッセージは、実際に出力される英語のまま書く。日本語版でも訳さない。
 
