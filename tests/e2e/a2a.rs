@@ -187,3 +187,20 @@ fn a2a_sends_the_token_from_env_as_a_bearer_header() {
         "{request}"
     );
 }
+
+#[test]
+fn a2a_refuses_to_send_a_token_over_plain_http_to_a_remote_host() {
+    let path = write_config(
+        "insecure-token",
+        "[a2a.t]\nurl = \"http://example.invalid:1\"\ntoken_env = \"AGENTCTL_E2E_TOKEN\"\n",
+    );
+    let out = finish(
+        command(&path, &["a2a", "t", "card"])
+            .env("AGENTCTL_E2E_TOKEN", "s3cret")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(out.code, 1);
+    assert!(out.stderr.contains("allow_insecure"), "{}", out.stderr);
+}

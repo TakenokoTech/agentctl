@@ -124,3 +124,15 @@ fn http_unreachable_server_exits_1() {
     assert_eq!(out.code, 1);
     assert!(out.stdout.is_empty());
 }
+
+#[test]
+fn http_refuses_to_send_a_token_over_plain_http_to_a_remote_host() {
+    let path = config(
+        "http-insecure-token",
+        "http://example.invalid:1/mcp",
+        Some("AGENTCTL_E2E_HTTP_TOKEN"),
+    );
+    let out = with_token(&path, "s3cret", &["mcp", "remote", "tools"]);
+    assert_eq!(out.code, 1);
+    assert!(out.stderr.contains("allow_insecure"), "{}", out.stderr);
+}

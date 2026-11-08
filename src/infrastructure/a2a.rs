@@ -15,7 +15,7 @@ use crate::domain::a2a::{
     SendRequest, SkillInfo, TaskEvent, TaskInfo, TaskState,
 };
 use crate::domain::config::A2aAgent;
-use crate::infrastructure::config::read_token;
+use crate::infrastructure::config::{ensure_secure_transport, read_token};
 
 pub struct A2aRustConnector;
 
@@ -25,8 +25,10 @@ impl A2aConnector for A2aRustConnector {
     type Session = A2aRustSession;
 
     fn connect(&self, agent: &A2aAgent) -> Result<A2aRustSession> {
+        let token = read_token(&agent.token_env)?;
+        ensure_secure_transport(&agent.url, token.is_some(), agent.allow_insecure)?;
         let http = reqwest::Client::builder()
-            .default_headers(auth_headers(read_token(&agent.token_env)?)?)
+            .default_headers(auth_headers(token)?)
             .build()?;
         Ok(A2aRustSession(A2AClient::with_http_client(
             &agent.url,
@@ -105,10 +107,9 @@ impl A2aSession for A2aRustSession {
 fn auth_headers(token: Option<String>) -> Result<HeaderMap> {
     let mut headers = HeaderMap::new();
     if let Some(token) = token {
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {token}"))?,
-        );
+        let mut value = HeaderValue::from_str(&format!("Bearer {token}"))?;
+        value.set_sensitive(true);
+        headers.insert(AUTHORIZATION, value);
     }
     Ok(headers)
 }

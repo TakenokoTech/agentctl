@@ -29,6 +29,8 @@ pub enum McpTransport {
     Http {
         url: String,
         token_env: Option<String>,
+        /// 平文の HTTP でもトークンを送ることを許す。
+        allow_insecure: bool,
     },
 }
 
@@ -47,6 +49,8 @@ enum RawMcpServer {
         description: Option<String>,
         url: String,
         token_env: Option<String>,
+        #[serde(default)]
+        allow_insecure: bool,
     },
 }
 
@@ -65,9 +69,14 @@ impl From<RawMcpServer> for McpServer {
                 description,
                 url,
                 token_env,
+                allow_insecure,
             } => McpServer {
                 description,
-                transport: McpTransport::Http { url, token_env },
+                transport: McpTransport::Http {
+                    url,
+                    token_env,
+                    allow_insecure,
+                },
             },
         }
     }
@@ -79,6 +88,9 @@ pub struct A2aAgent {
     pub url: String,
     pub description: Option<String>,
     pub token_env: Option<String>,
+    /// 平文の HTTP でもトークンを送ることを許す。
+    #[serde(default)]
+    pub allow_insecure: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

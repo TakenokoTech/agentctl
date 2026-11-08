@@ -199,3 +199,10 @@ fn token_becomes_a_bearer_authorization_header() {
 fn token_that_is_not_a_valid_header_value_is_an_error() {
     assert!(auth_headers(Some("line1\nline2".into())).is_err());
 }
+
+#[test]
+fn authorization_header_is_marked_sensitive() {
+    let headers = auth_headers(Some("s3cret".into())).unwrap();
+    assert!(headers[AUTHORIZATION].is_sensitive());
+    assert!(!format!("{headers:?}").contains("s3cret"));
+}
