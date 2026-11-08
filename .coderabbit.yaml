@@ -2,8 +2,21 @@
 language: en-US
 
 reviews:
+  # "chill" suppresses nitpicks; "assertive" is the noisy one.
+  profile: chill
   # No poem in the summary comment.
   poem: false
+  path_instructions:
+    - path: "**"
+      instructions: |
+        Comment only on Critical or Major issues: correctness bugs, security
+        problems, data loss, panics, and violations of the layer dependency
+        rules in .agent/architecture/SKILL.md.
+        Do not post Minor, Trivial, or nitpick comments. That includes style,
+        naming, formatting, small refactors, missing docs or tests, edge
+        cases that are unlikely in practice, and optional improvements.
+        When unsure whether something is Major, do not comment.
+        If nothing qualifies, post no inline comments.
   auto_review:
     # Also review PRs whose base is not the default branch (develop),
     # such as develop -> main and stacked feature/* PRs.
