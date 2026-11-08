@@ -32,6 +32,8 @@ cd agentctl
 cargo install --path .
 ```
 
+This installs two programs: `agentctl`, and `agentctl-mcp`, an MCP server that lets MCP clients use `agentctl` (see [Using it from an MCP client](#using-it-from-an-mcp-client)).
+
 ## Quick start
 
 Build the test MCP server that ships with the repository, and describe it in `agentctl.toml` (run the commands from the repository root):
@@ -57,6 +59,23 @@ agentctl mcp demo call echo --args '{"message":"hi"}'
 ```
 
 To use your own servers and agents, add them to the config as described in [Configuration](docs/manual/configuration.md).
+
+## Using it from an MCP client
+
+`agentctl-mcp` exposes the commands as MCP tools over stdio, so MCP clients can use them without a shell. Add it to the client's MCP configuration (for example `mcp.json` or `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "agentctl": {
+      "command": "agentctl-mcp",
+      "env": { "AGENTCTL_CONFIG": "/path/to/agentctl.toml" }
+    }
+  }
+}
+```
+
+`agentctl-mcp` runs `agentctl` for every tool call, so `agentctl` must be on the `PATH` (or set `AGENTCTL_BIN` to its path). The available tools are listed in [Usage](docs/manual/usage.md#running-as-an-mcp-server).
 
 ## Documentation
 

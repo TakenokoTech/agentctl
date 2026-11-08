@@ -5,7 +5,7 @@ description: agentctl の DDD レイヤー構成と依存ルール。src 配下�
 
 # アーキテクチャ
 
-単一クレート内のモジュールで層を分ける。
+`agentctl` のバイナリ(`src/` 直下)のモジュールで層を分ける。`src/bin/agentctl-mcp/` は `agentctl` を呼ぶだけの薄いラッパーで、この層構成の対象外(`src/bin/agentctl-mcp/AGENTS.md` に従う)。
 
 | 層 | 役割 | 依存してよい先 |
 |---|---|---|

@@ -13,7 +13,7 @@
 
 ## 構成
 
-DDD に沿った層構成。ルールは `.agent/architecture/SKILL.md` に従う。`src` の構成や依存を変えたら `.agent/architecture/check.sh` で検証する。
+`agentctl` のバイナリ(`src/` 直下)は DDD に沿った層構成。ルールは `.agent/architecture/SKILL.md` に従う。`src` の構成や依存を変えたら `.agent/architecture/check.sh` で検証する。`src/bin/agentctl-mcp/`(MCP ラッパー)は層構成の対象外で、`src/bin/agentctl-mcp/AGENTS.md` に従う。
 
 ## セットアップ
 
@@ -27,5 +27,6 @@ git config core.hooksPath .agent/hooks
 
 - `.mcp.json` はチーム共有用。個人用の MCP サーバーは `claude mcp add --scope local` で登録し、`.mcp.json` には書かない。
 - 依頼されていない付随ファイル(サンプル設定など)は追加しない。必要だと考えたら、追加せずに提案する。
+- 設計判断(構成、層、依存、配置、公開インターフェースなど、後戻りしにくいもの)の前には、`.agent/decision/SKILL.md` の手順に従い、決定を `docs/adr/` に ADR として残す。
 - ユーザーへの質問は、上下キーと Enter だけで答えられる選択式の UI で提示する(Claude Code では `AskUserQuestion`)。番号付きのテキストで答えさせない。
 - 大きなコミット(新機能、複数ファイル、設計に関わる変更)の前には、`/pre-commit-review` を実行するか確認する。スキルはユーザーが呼ぶもので、自動では実行しない。

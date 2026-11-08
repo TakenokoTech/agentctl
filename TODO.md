@@ -12,7 +12,7 @@
 8. [ ] ライセンスを決め、`LICENSE` ファイルと README の記載を足す(現在は `LICENSE` が無い)
 9. [x] `README.md` と `README.ja.md` を同期させる運用を決める(`docs/AGENTS.md` に規約として記載)
 10. [x] README の Rust の最小バージョンを確認する(依存クレートの要求は最大で uuid の 1.89。1.89.0 でビルドできる)
-11. [ ] インストールを楽にする。リポジトリの公開先と URL が決まったら、まず `cargo install --git <URL>` の1行に差し替える(7番に依存)。配布先を広げるなら `cargo-dist` でビルド済みバイナリとインストーラを配る。crates.io への公開は、ライセンス(8番)と名前を決めてから最後に行う。判断材料は、利用者に Rust 環境を求めてよいか
+11. [ ] インストールを楽にする。リポジトリの公開先と URL が決まったら、まず `cargo install --git <URL>` の1行に差し替える(7番に依存)。`npx` のようにインストール不要で使いたい場合は、`cargo-dist`(現 `dist`)の npm インストーラで、ビルド済みバイナリをダウンロードする npm パッケージを公開する(`npx -y -p <パッケージ> agentctl-mcp` の形になる見込みで、複数バイナリでの書式は未検証)。そのほかの案は Docker イメージ、PyPI(`uvx`)。いずれも GitHub のリポジトリ、リリースの CI、ライセンス(8番)が前提。crates.io への公開は、ライセンスと名前を決めてから最後に行う。判断材料は、利用者に Rust 環境を求めてよいか。決めるときは `.agent/decision/SKILL.md` の手順で ADR に残す
 
 ## `/code-review` の指摘
 
@@ -31,4 +31,8 @@
 
 ## 機能追加
 
-22. [ ] `agentctl` を MCP サーバーとしても動かし、MCP クライアントからコマンドを実行できるようにする(例: `agentctl serve` のようなサブコマンド)。デザインまとめで「案B(1つのコアを CLI / MCP サーバー / A2A サーバーの入口で公開)」として今回は選ばなかった構成にあたる。決めること: 公開するコマンドの範囲(`list` / `tools` / `schema` / `call` / A2A 系)、トランスポート(stdio か Streamable HTTP)、設定済みのサーバーとエージェントだけを対象にするなど任意のコマンド実行を許さない制限、認証情報の扱い(未解決課題の「認証情報がエージェントから見える」と関連)
+22. [x] MCP クライアントから使えるようにする。同じパッケージの2つ目のバイナリ `agentctl-mcp`(`src/bin/agentctl-mcp/`)が、ツール呼び出しごとに `agentctl` をサブプロセスで実行する。`cargo install --path .` で `agentctl` と一緒に入る。公開するツールは `list` / `mcp_tools` / `mcp_schema` / `mcp_call` / `a2a_card` / `a2a_send` / `a2a_task_get` / `a2a_task_cancel`。`a2a task watch` は公開しない。stdio のみで、Streamable HTTP は未対応
+23. [ ] `agentctl-mcp` の内部構成を決める。現在は平らな4モジュール(`command` / `runner` / `server` / `tools`)で、層構成の対象外としている。候補と点数は ADR 0003(`docs/adr/0003-mcp-wrapper-internal-structure.md`、Proposed。推奨は「C から入って D を目指す」)。決めたら、ADR を `Accepted` にし、`AGENTS.md` と `.agent/architecture/SKILL.md` の「対象外」の記述を直し、必要なら `check.sh` を `src/bin/agentctl-mcp/` に広げる
+24. [ ] `agentctl-mcp` を同じパッケージに置いたことで、`agentctl` 本体のコンパイル時間がどれだけ増えるか(`rmcp` のサーバー機能を一緒にビルドする)を計測する。独立して公開する必要が出たら、`crates/agentctl-mcp` への切り出しを検討する(ADR 0002 の「見直す条件」)
+25. [ ] 意思決定の手順(`.agent/decision/SKILL.md`)を実際の設計判断で使い、手順の足りない点を直す。最初の対象は ADR 0003
+26. [ ] `agentctl-mcp` が、`PATH` や `AGENTCTL_BIN` より先に、自分と同じ場所にある `agentctl` を探すようにする。配布物(npm パッケージなど)に両方のバイナリが同梱されても、設定なしで動く。実装前に、探す順序(同じ場所 → `AGENTCTL_BIN` → `PATH` のどれを優先するか)を決める

@@ -9,6 +9,7 @@ mod a2a;
 mod common;
 mod mcp;
 mod mcp_http;
+mod mcp_wrapper;
 
 use std::path::Path;
 
