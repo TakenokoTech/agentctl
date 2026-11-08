@@ -5,6 +5,7 @@ use crate::common::{
     run_with, write_config,
 };
 use std::process::Stdio;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::common::{command, finish};
 
@@ -18,9 +19,12 @@ fn config(name: &str, url: &str, token_env: Option<&str>) -> std::path::PathBuf 
     )
 }
 
+/// テストは並列に走るので、設定ファイルはテストごとに別名にする。
 fn server() -> (HttpServer, std::path::PathBuf) {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
     let server = start();
-    let path = config("http-plain", &server.url, None);
+    let name = format!("http-plain-{}", NEXT.fetch_add(1, Ordering::Relaxed));
+    let path = config(&name, &server.url, None);
     (server, path)
 }
 
