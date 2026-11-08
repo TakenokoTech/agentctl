@@ -28,7 +28,7 @@ The text of `a2a send` may start with `-` (for example `agentctl a2a helper send
 |---|---|
 | `--config <PATH>` | Config file path. Defaults to `agentctl.toml`. Can also be set with `AGENTCTL_CONFIG`. |
 | `--raw` | Print the full protocol response instead of a compact summary. |
-| `--timeout <SECONDS>` | Give up on a connection or request after this many seconds. Defaults to `60`; `0` means no limit. Can also be set with `AGENTCTL_TIMEOUT`. Does not apply to `a2a task watch`. |
+| `--timeout <SECONDS>` | Give up on a connection or request after this many seconds. Defaults to `60`; `0` means no limit. Can also be set with `AGENTCTL_TIMEOUT`. For `a2a task watch`, it limits only the connection, because the command runs until the task ends. |
 
 ## Passing tool arguments
 

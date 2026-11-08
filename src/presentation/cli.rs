@@ -25,7 +25,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub raw: bool,
     /// Give up on a connection or request after this many seconds (0 = no limit).
-    /// Does not apply to `a2a task watch`, which runs until the task ends
+    /// `a2a task watch` limits only the connection, since it runs until the task ends
     #[arg(
         long,
         env = "AGENTCTL_TIMEOUT",
@@ -108,7 +108,7 @@ pub enum A2aCmd {
 pub enum TaskCmd {
     /// Print the current task state
     Get { id: String },
-    /// Stream task updates as NDJSON until the server closes the stream
+    /// Stream task updates as NDJSON until the task reaches a final state
     Watch { id: String },
     /// Cancel a task
     Cancel { id: String },

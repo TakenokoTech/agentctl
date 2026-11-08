@@ -205,3 +205,28 @@ fn a_timeout_that_is_not_a_number_of_seconds_is_rejected() {
     assert!(parse(&["--timeout", "soon", "list"]).is_err());
     assert!(parse(&["--timeout", "-1", "list"]).is_err());
 }
+
+#[test]
+fn the_watch_help_says_it_stops_at_a_final_state() {
+    let cmd = Cli::command();
+    let watch = cmd
+        .find_subcommand("a2a")
+        .and_then(|a| a.find_subcommand("task"))
+        .and_then(|t| t.find_subcommand("watch"))
+        .expect("a2a task watch");
+    let about = watch.get_about().unwrap().to_string();
+    assert!(about.contains("final state"), "{about}");
+    assert!(!about.contains("server closes"), "{about}");
+}
+
+#[test]
+fn the_timeout_help_says_watch_limits_only_the_connection() {
+    let cmd = Cli::command();
+    let help = cmd
+        .get_arguments()
+        .find(|a| a.get_id() == "timeout")
+        .and_then(|a| a.get_help())
+        .unwrap()
+        .to_string();
+    assert!(help.contains("only the connection"), "{help}");
+}
