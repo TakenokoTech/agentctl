@@ -90,3 +90,13 @@ fn bindings_the_client_does_not_use_are_not_checked() {
     let interfaces = [interface("https://other.example.net", "GRPC")];
     assert!(ensure_same_origin("https://agent.example.com", &interfaces).is_ok());
 }
+
+#[test]
+fn redirects_stay_on_the_origin_of_the_configured_url() {
+    let base = reqwest::Url::parse("https://agent.example.com:8443/base").unwrap();
+    let ok = |u: &str| redirect_allowed(&reqwest::Url::parse(u).unwrap(), &base);
+    assert!(ok("https://agent.example.com:8443/elsewhere"));
+    assert!(!ok("http://agent.example.com:8443/"), "scheme change");
+    assert!(!ok("https://agent.example.com:9443/"), "port change");
+    assert!(!ok("https://evil.example.net:8443/"), "host change");
+}

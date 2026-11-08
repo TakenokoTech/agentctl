@@ -45,8 +45,13 @@ fn client(
     headers: HeaderMap,
     timeout: Option<Duration>,
     whole_request: bool,
+    has_token: bool,
 ) -> Result<A2AClient> {
     let mut http = reqwest::Client::builder().default_headers(headers);
+    if has_token {
+        // トークンを持つときは、設定した URL と同じオリジンへのリダイレクトだけを辿る
+        http = http.redirect(same_origin_redirects(&agent.url)?);
+    }
     if let Some(limit) = timeout {
         http = http.connect_timeout(limit);
         if whole_request {
@@ -69,8 +74,8 @@ impl A2aConnector for A2aRustConnector {
         ensure_secure_transport(&agent.url, has_token, agent.allow_insecure)?;
         let headers = auth_headers(token)?;
         Ok(A2aRustSession {
-            request: client(agent, headers.clone(), self.timeout, true)?,
-            stream: client(agent, headers, self.timeout, false)?,
+            request: client(agent, headers.clone(), self.timeout, true, has_token)?,
+            stream: client(agent, headers, self.timeout, false, has_token)?,
             timeout: self.timeout,
             token_origin: has_token.then(|| agent.url.clone()),
         })
@@ -108,6 +113,31 @@ impl A2aRustSession {
         }
         Ok(())
     }
+}
+
+/// リダイレクト先が `base` と同じオリジン(スキーム、ホスト、ポート)か。
+/// reqwest はスキームだけが変わるリダイレクトでは Authorization を外さないため、自前で判断する。
+fn redirect_allowed(next: &reqwest::Url, base: &reqwest::Url) -> bool {
+    next.origin() == base.origin()
+}
+
+/// トークンを持つときのリダイレクト方針。設定した URL と同じオリジンへのものだけ辿る。
+fn same_origin_redirects(base: &str) -> Result<reqwest::redirect::Policy> {
+    const MAX_REDIRECTS: usize = 10;
+    let base = reqwest::Url::parse(base)?;
+    Ok(reqwest::redirect::Policy::custom(move |attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            attempt.error("too many redirects")
+        } else if redirect_allowed(attempt.url(), &base) {
+            attempt.follow()
+        } else {
+            let msg = format!(
+                "refusing to follow a redirect to a different origin ({}) with a token",
+                attempt.url()
+            );
+            attempt.error(msg)
+        }
+    }))
 }
 
 /// クライアントが使うバインディングのエンドポイントが、すべて `base` と同じオリジンにあるか。

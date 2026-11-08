@@ -41,3 +41,5 @@ allow_insecure = false               # optional, see Authentication
 The token is sent only over `https://`, or over `http://` to a loopback host (`localhost`, `127.0.0.1`, `[::1]`). For any other `http://` URL, `agentctl` exits with an error before sending anything. If you accept the risk of sending the token in clear text, for example inside a closed network, set `allow_insecure = true` on that entry. `allow_insecure` is accepted only on `http` MCP servers and A2A agents.
 
 For an A2A agent, the token is also sent only to the origin (scheme, host, and port) of the configured `url`. If the agent card advertises a JSON-RPC or HTTP+JSON endpoint on another origin, `agentctl` exits with an error before the request. Set `url` to the origin that the card advertises.
+
+With a token, `agentctl` also refuses to follow an HTTP redirect to a different origin, including a change of scheme or port alone.
