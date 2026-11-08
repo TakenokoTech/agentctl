@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: ja-JP
+
+reviews:
+  auto_review:
+    # 既定ブランチ(develop)以外が base の PR も、レビューの対象にする
+    # (develop → main や、積み重ねた feature/* の PR)
+    base_branches:
+      - ".*"
