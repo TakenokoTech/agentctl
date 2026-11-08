@@ -1,32 +1,41 @@
 use std::io;
 
-use anyhow::{Context, anyhow};
+use anyhow::anyhow;
 
 use super::*;
 
-fn io_error(kind: io::ErrorKind) -> anyhow::Error {
-    io::Error::from(kind).into()
+fn io_error(kind: io::ErrorKind) -> io::Error {
+    io::Error::from(kind)
 }
 
 #[test]
-fn a_broken_pipe_is_recognized() {
-    assert!(is_broken_pipe(&io_error(io::ErrorKind::BrokenPipe)));
+fn a_broken_pipe_on_stdout_becomes_the_closed_output_marker() {
+    assert!(is_closed_output(&stdout_error(io_error(
+        io::ErrorKind::BrokenPipe
+    ))));
 }
 
 #[test]
-fn a_broken_pipe_is_recognized_through_added_context() {
-    let err = io_error(io::ErrorKind::BrokenPipe)
+fn the_marker_is_recognized_through_added_context() {
+    let err = stdout_error(io_error(io::ErrorKind::BrokenPipe))
         .context("writing output")
         .context("running command");
-    assert!(is_broken_pipe(&err));
+    assert!(is_closed_output(&err));
 }
 
 #[test]
-fn other_errors_are_not_a_broken_pipe() {
-    assert!(!is_broken_pipe(&io_error(io::ErrorKind::PermissionDenied)));
-    assert!(!is_broken_pipe(&anyhow!("unknown MCP server 'x'")));
-    let err: anyhow::Result<()> = Err(anyhow!("boom"));
-    assert!(!is_broken_pipe(&err.context("ctx").unwrap_err()));
+fn other_stdout_errors_are_not_the_closed_output_marker() {
+    assert!(!is_closed_output(&stdout_error(io_error(
+        io::ErrorKind::PermissionDenied
+    ))));
+    assert!(!is_closed_output(&anyhow!("unknown MCP server 'x'")));
+}
+
+#[test]
+fn a_broken_pipe_from_elsewhere_is_not_the_closed_output_marker() {
+    // HTTP の書き込み失敗など、標準出力以外の BrokenPipe を成功として扱わない
+    let err = anyhow::Error::from(io_error(io::ErrorKind::BrokenPipe)).context("sending request");
+    assert!(!is_closed_output(&err));
 }
 
 // ---------- TSV の1列 ----------

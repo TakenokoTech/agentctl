@@ -23,7 +23,7 @@ async fn main() -> ExitCode {
     match run(cli).await {
         Ok(code) => code,
         // `| head` などで出力先が閉じられた。エラーではなく、静かに終える
-        Err(e) if presentation::output::is_broken_pipe(&e) => ExitCode::SUCCESS,
+        Err(e) if presentation::output::is_closed_output(&e) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("error: {e:#}");
             ExitCode::from(1)
