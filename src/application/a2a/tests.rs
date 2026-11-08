@@ -96,6 +96,7 @@ fn agent(url: &str) -> A2aAgent {
         url: url.into(),
         description: None,
         token_env: None,
+        allow_insecure: false,
     }
 }
 

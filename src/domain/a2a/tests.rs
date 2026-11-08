@@ -20,6 +20,23 @@ fn only_failed_and_rejected_are_failures() {
 }
 
 #[test]
+fn watching_may_stop_once_the_task_is_final_or_waiting_for_the_user() {
+    for name in [
+        "completed",
+        "failed",
+        "rejected",
+        "canceled",
+        "input_required",
+        "auth_required",
+    ] {
+        assert!(TaskState::new(name).is_settled(), "{name}");
+    }
+    for name in ["submitted", "working", ""] {
+        assert!(!TaskState::new(name).is_settled(), "{name}");
+    }
+}
+
+#[test]
 fn events_expose_state_only_when_they_carry_one() {
     let task = TaskInfo {
         id: "t".into(),

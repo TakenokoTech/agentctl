@@ -15,7 +15,7 @@ agentctl [OPTIONS] <COMMAND>
 | `a2a <agent> card` | Show the agent card (description, skills, streaming support) | JSON |
 | `a2a <agent> send <text> [--context-id ID] [--task-id ID] [--no-wait]` | Send a message | JSON (`type`: `message` or `task`) |
 | `a2a <agent> task get <id>` | Show a task's current state | JSON |
-| `a2a <agent> task watch <id>` | Stream state changes until the task ends | NDJSON |
+| `a2a <agent> task watch <id>` | Stream state changes until the server closes the stream | NDJSON |
 | `a2a <agent> task cancel <id>` | Cancel a task | JSON |
 
 ## Options
@@ -23,7 +23,7 @@ agentctl [OPTIONS] <COMMAND>
 | Option | Description |
 |---|---|
 | `--config <PATH>` | Config file path. Defaults to `agentctl.toml`. Can also be set with `AGENTCTL_CONFIG`. |
-| `--raw` | Print the full protocol response instead of a compact summary. |
+| `--raw` | Print the full protocol response instead of a compact summary. Applies to `mcp call` and the `a2a` commands; `list`, `mcp tools`, and `mcp schema` ignore it. |
 
 ## Passing tool arguments
 
@@ -35,7 +35,7 @@ echo '{"message":"from stdin"}' | agentctl mcp demo call echo --args -
 
 ## Long-running A2A tasks
 
-`send --no-wait` returns as soon as the A2A agent accepts the task. Follow up with `task get`, `task watch`, or `task cancel`. Task states are printed in short snake case, for example `input_required`; to answer a task in that state, run `send` again with `--task-id`.
+`send --no-wait` returns as soon as the A2A agent accepts the task. Follow up with `task get`, `task watch`, or `task cancel`. `task watch` returns when the server closes the stream, which a server normally does after the task reaches a final state; if the server keeps the stream open, it keeps waiting. It exits with `1` if the stream closes while the task is still `submitted` or `working`. Task states are printed in short snake case, for example `input_required`; to answer a task in that state, run `send` again with `--task-id`.
 
 ## Running as an MCP server
 

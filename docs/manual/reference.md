@@ -9,8 +9,9 @@
 | `0` | Success |
 | `1` | Configuration, transport, or protocol error (including a malformed `--args`) |
 | `2` | The tool returned an error result, or the A2A task ended as `failed` or `rejected` |
+| `64` | The command line is invalid (unknown subcommand, missing argument, and so on) |
 
-Command-line usage errors reported by the argument parser also exit with `2`.
+`--help` and `--version` exit with `0`.
 
 ## Troubleshooting
 

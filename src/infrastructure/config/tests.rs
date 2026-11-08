@@ -82,3 +82,76 @@ fn missing_or_unknown_transport_is_rejected() {
 fn unknown_top_level_keys_are_rejected() {
     assert!(parse("[mpc.x]\ntransport = \"stdio\"\n").is_err());
 }
+
+#[test]
+fn unknown_mcp_server_keys_are_rejected() {
+    let http = "[mcp.x]\ntransport = \"http\"\nurl = \"https://x\"\ntoken_en = \"T\"\n";
+    assert!(parse(http).is_err(), "misspelled token_env");
+    let stdio = "[mcp.x]\ntransport = \"stdio\"\ncommand = [\"x\"]\nenvv = {}\n";
+    assert!(parse(stdio).is_err(), "misspelled env");
+    let mixed = "[mcp.x]\ntransport = \"stdio\"\ncommand = [\"x\"]\nurl = \"https://x\"\n";
+    assert!(parse(mixed).is_err(), "url belongs to http");
+}
+
+#[test]
+fn http_server_may_omit_token_env() {
+    let cfg = parse("[mcp.x]\ntransport = \"http\"\nurl = \"https://x\"\n").unwrap();
+    assert!(matches!(
+        cfg.mcp("x").unwrap().transport,
+        McpTransport::Http {
+            token_env: None,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn token_needs_https_or_loopback_unless_insecure_is_allowed() {
+    let check = |url: &str, token: bool, allow: bool| ensure_secure_transport(url, token, allow);
+    for url in [
+        "https://mcp.example.com/mcp",
+        "http://127.0.0.1:3000",
+        "http://localhost/x",
+        "http://[::1]:8080/",
+    ] {
+        assert!(check(url, true, false).is_ok(), "{url}");
+    }
+    for url in [
+        "http://mcp.example.com/mcp",
+        "http://192.168.0.5",
+        "http://localhost.example.com",
+    ] {
+        let err = check(url, true, false).unwrap_err().to_string();
+        assert!(err.contains("allow_insecure"), "{url}: {err}");
+        assert!(check(url, false, false).is_ok(), "{url} without a token");
+        assert!(check(url, true, true).is_ok(), "{url} when allowed");
+    }
+    assert!(check("not a url", true, false).is_err());
+}
+
+#[test]
+fn allow_insecure_defaults_to_false_and_is_http_only() {
+    let cfg = parse(
+        "[mcp.x]\ntransport = \"http\"\nurl = \"http://x\"\nallow_insecure = true\n\
+         [mcp.y]\ntransport = \"http\"\nurl = \"http://y\"\n\
+         [a2a.z]\nurl = \"http://z\"\nallow_insecure = true\n",
+    )
+    .unwrap();
+    assert!(matches!(
+        cfg.mcp("x").unwrap().transport,
+        McpTransport::Http {
+            allow_insecure: true,
+            ..
+        }
+    ));
+    assert!(matches!(
+        cfg.mcp("y").unwrap().transport,
+        McpTransport::Http {
+            allow_insecure: false,
+            ..
+        }
+    ));
+    assert!(cfg.a2a("z").unwrap().allow_insecure);
+    let stdio = "[mcp.s]\ntransport = \"stdio\"\ncommand = [\"x\"]\nallow_insecure = true\n";
+    assert!(parse(stdio).is_err());
+}

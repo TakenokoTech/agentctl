@@ -14,24 +14,72 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(from = "RawMcpServer")]
 pub struct McpServer {
     pub description: Option<String>,
-    #[serde(flatten)]
     pub transport: McpTransport,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(tag = "transport", rename_all = "lowercase")]
+#[derive(Debug)]
 pub enum McpTransport {
     Stdio {
         command: Vec<String>,
-        #[serde(default)]
         env: BTreeMap<String, String>,
     },
     Http {
         url: String,
         token_env: Option<String>,
+        /// 平文の HTTP でもトークンを送ることを許す。
+        allow_insecure: bool,
     },
+}
+
+/// 設定ファイル上の MCP サーバ。`flatten` では `deny_unknown_fields` が効かないため、
+/// キーを全部1か所に並べて未知のキーを弾き、`McpServer` に変換する。
+#[derive(Deserialize)]
+#[serde(tag = "transport", rename_all = "lowercase", deny_unknown_fields)]
+enum RawMcpServer {
+    Stdio {
+        description: Option<String>,
+        command: Vec<String>,
+        #[serde(default)]
+        env: BTreeMap<String, String>,
+    },
+    Http {
+        description: Option<String>,
+        url: String,
+        token_env: Option<String>,
+        #[serde(default)]
+        allow_insecure: bool,
+    },
+}
+
+impl From<RawMcpServer> for McpServer {
+    fn from(raw: RawMcpServer) -> Self {
+        match raw {
+            RawMcpServer::Stdio {
+                description,
+                command,
+                env,
+            } => McpServer {
+                description,
+                transport: McpTransport::Stdio { command, env },
+            },
+            RawMcpServer::Http {
+                description,
+                url,
+                token_env,
+                allow_insecure,
+            } => McpServer {
+                description,
+                transport: McpTransport::Http {
+                    url,
+                    token_env,
+                    allow_insecure,
+                },
+            },
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +88,9 @@ pub struct A2aAgent {
     pub url: String,
     pub description: Option<String>,
     pub token_env: Option<String>,
+    /// 平文の HTTP でもトークンを送ることを許す。
+    #[serde(default)]
+    pub allow_insecure: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

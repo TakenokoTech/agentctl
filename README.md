@@ -24,10 +24,10 @@ The output above comes from the test servers used by this repository's test suit
 
 ## Installation
 
-`agentctl` is not published to crates.io. Build it from source with Rust 1.85 or later:
+`agentctl` is not published to crates.io. Build it from source with Rust 1.89 or later:
 
 ```sh
-git clone <this repository>
+git clone https://github.com/TakenokoTech/agentctl.git
 cd agentctl
 cargo install --path .
 ```

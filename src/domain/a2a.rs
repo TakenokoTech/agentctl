@@ -23,6 +23,14 @@ impl TaskState {
     pub fn is_failure(&self) -> bool {
         matches!(self.0.as_str(), "failed" | "rejected")
     }
+
+    /// 終了した、またはユーザーの入力を待っていて、これ以上は進まない状態か。
+    pub fn is_settled(&self) -> bool {
+        matches!(
+            self.0.as_str(),
+            "completed" | "failed" | "rejected" | "canceled" | "input_required" | "auth_required"
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
