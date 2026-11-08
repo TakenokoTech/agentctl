@@ -30,3 +30,5 @@ description: agentctl の DDD レイヤー構成と依存ルール。src 配下�
 ```sh
 .agent/architecture/check.sh
 ```
+
+実体は `tests/architecture.rs`(`cargo test --test architecture` でも実行できる)。`src/**/*.rs` を `syn` で解析し、複数行の `use`、入れ子のグループ、`crate::` / `self::` / `super::` の相対パスに加えて、`use` を使わずに書いたパスも検出する。`src/bin/` は対象外。
