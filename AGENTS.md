@@ -26,3 +26,4 @@ git config core.hooksPath .agent/hooks
 ## 注意事項
 
 - `.mcp.json` はチーム共有用。個人用の MCP サーバーは `claude mcp add --scope local` で登録し、`.mcp.json` には書かない。
+- 依頼されていない付随ファイル(サンプル設定など)は追加しない。必要だと考えたら、追加せずに提案する。
