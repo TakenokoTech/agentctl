@@ -1,4 +1,6 @@
 //! E2E テスト共通のハーネス。実バイナリの起動、設定ファイルの生成、テスト用サーバの用意をする。
+#[path = "../fixtures/mcp_http_server.rs"]
+pub mod mcp_http_server;
 #[path = "../fixtures/a2a_agent.rs"]
 mod test_agent;
 
