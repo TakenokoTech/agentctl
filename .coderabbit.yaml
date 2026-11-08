@@ -2,8 +2,19 @@
 language: en-US
 
 reviews:
+  # "chill" suppresses nitpicks; "assertive" is the noisy one.
+  profile: chill
   # No poem in the summary comment.
   poem: false
+  path_instructions:
+    - path: "**"
+      instructions: |
+        Comment only on high-severity issues: correctness bugs, security
+        problems, data loss, panics, and violations of the layer dependency
+        rules in .agent/architecture/SKILL.md.
+        Do not comment on style, naming, formatting, minor refactors,
+        missing docs, or optional improvements. If nothing qualifies, post no
+        inline comments.
   auto_review:
     # Also review PRs whose base is not the default branch (develop),
     # such as develop -> main and stacked feature/* PRs.
