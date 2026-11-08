@@ -10,18 +10,15 @@ disable-model-invocation: true
 
 ## 手順
 
-1. `git status --short` で変更ファイルを把握する。
-2. `git diff HEAD` で追跡中ファイルの差分を読む。未追跡ファイルは中身を直接読む。
+1. `git status --short` で、ステージ済み・未ステージ・未追跡の変更を区別して把握する。
+2. 対象は、**ステージ済みの差分**(これからコミットされる内容)だけ。`git diff --cached` で差分を読み、全体が必要なファイルは `git show :<パス>` でステージ済みの内容を読む。作業ツリーの内容と未追跡ファイルは、ステージされていない限り対象にしない。
+   - 何もステージされていないときは、判定を出さずに、ステージを依頼して終える。
 3. 下記の観点を順に確認する。
 4. 1つでも違反があれば Reject。すべて満たせば Approve。
 
 ## 観点
 
-1. **機械検査**: 次がすべて成功する。
-   - `.agent/architecture/check.sh`
-   - `cargo fmt --check`
-   - `cargo clippy -- -D warnings`
-   - `cargo test`
+1. **機械検査**: `.agent/hooks/pre-commit` が成功する。フックは、ステージ済みの内容に対して、アーキテクチャ検査(`.agent/architecture/check.sh`)、`cargo fmt --check`、`cargo clippy -- -D warnings`、`cargo test` を実行する。
 2. **アーキテクチャ**: `.agent/architecture/SKILL.md` の層構成と設計方針に反していない。`check.sh` で検出できない違反(ロジックを `main.rs` に置く、不要な抽象化など)も見る。
 3. **AGENTS.md との整合**: `AGENTS.md` の記述が実態と合っている。`AGENTS.md` 自身の書き方の注意書きにも従っている。
 4. **混入物**: 個人設定、認証情報、ローカル専用の MCP 設定(`.mcp.json` への個人用サーバー追記など)、デバッグ用の残骸が含まれていない。

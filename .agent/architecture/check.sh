@@ -1,35 +1,14 @@
 #!/usr/bin/env bash
 # 層間の依存ルール違反を検出する。ルールは SKILL.md を参照。
+# 実体は tests/architecture.rs。`syn` で use と式の中のパスを解析する。
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-# 層 -> 依存してはいけない層(| 区切り)
-declare -a RULES=(
-  "domain:application|infrastructure|presentation"
-  "application:infrastructure|presentation"
-  "infrastructure:presentation"
-  "presentation:infrastructure"
-)
-
-status=0
-for rule in "${RULES[@]}"; do
-  layer="${rule%%:*}"
-  forbidden="${rule#*:}"
-  files=()
-  [[ -f "src/$layer.rs" ]] && files+=("src/$layer.rs")
-  [[ -d "src/$layer" ]] && while IFS= read -r f; do files+=("$f"); done < <(find "src/$layer" -name '*.rs')
-  [[ ${#files[@]} -eq 0 ]] && continue
-
-  # `crate::x` と `crate::{x, ...}` の両形式を検出する
-  pattern="crate::(${forbidden})\b|crate::\{[^}]*\b(${forbidden})\b"
-  if grep -nE "$pattern" "${files[@]}"; then
-    echo "違反: $layer は ${forbidden//|/, } に依存できない" >&2
-    status=1
-  fi
-done
-
-if [[ $status -eq 0 ]]; then
+if output=$(cargo test --test architecture --quiet 2>&1); then
   echo "OK: 依存ルール違反なし"
+else
+  echo "$output"
+  echo "違反: 層の依存ルールを守っていない(上の出力を参照)" >&2
+  exit 1
 fi
-exit $status
