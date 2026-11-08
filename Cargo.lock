@@ -35,6 +35,7 @@ dependencies = [
  "rmcp",
  "serde",
  "serde_json",
+ "syn 2.0.119",
  "tokio",
  "toml",
  "uuid",
