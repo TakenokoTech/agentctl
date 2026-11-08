@@ -9,11 +9,13 @@ set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 # 実行ごとに別のディレクトリにする。Git はフックの実行中にインデックスをロックしないので、
 # 同じワークツリーで複数のフックが重なっても、互いの取り出し先を消さない
-snapshot=$(mktemp -d "$(git rev-parse --absolute-git-dir)/pre-commit-snapshot.XXXXXX")
+# リポジトリの外に作る(内側だと、cargo が親の Cargo.toml をワークスペースとして探してしまう)
+snapshot=$(mktemp -d "${TMPDIR:-/tmp}/agentctl-pre-commit.XXXXXX")
 trap 'rm -rf "$snapshot"' EXIT
 # インデックスの内容をそのまま取り出す(`git archive` は export-ignore のファイルを除く)。
+# sparse checkout で作業ツリーに無いファイル(skip-worktree)も、コミットには含まれるので取り出す。
 # `git commit <paths>` などでは、フックに専用のインデックスが渡され、それに従う
-git checkout-index --all --prefix="$snapshot/"
+git checkout-index --all --ignore-skip-worktree-bits --prefix="$snapshot/"
 
 # 取り出した先は Git のリポジトリではない。フックの環境変数が残っていると、cargo などが混乱する
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE

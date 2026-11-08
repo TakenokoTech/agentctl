@@ -143,7 +143,11 @@ fn it_does_not_touch_the_working_tree() {
 
     let before = run(&dir, "git", &["status", "--porcelain"], &[]).stdout;
     let main_before = fs::read_to_string(dir.join("src/main.rs")).unwrap();
-    let _ = hook(&dir, &[]);
+    // 取り出し先の置き場を、このテスト専用にして、後始末を確かめる
+    let scratch = dir.with_file_name("pre-commit-hook-untouched-scratch");
+    let _ = fs::remove_dir_all(&scratch);
+    fs::create_dir_all(&scratch).expect("ディレクトリを作れる");
+    let _ = hook(&dir, &[("TMPDIR", scratch.as_path())]);
 
     assert_eq!(
         run(&dir, "git", &["status", "--porcelain"], &[]).stdout,
@@ -157,17 +161,11 @@ fn it_does_not_touch_the_working_tree() {
         fs::read_to_string(dir.join("notes.txt")).unwrap(),
         "未追跡のファイル\n"
     );
-    let leftovers = fs::read_dir(dir.join(".git"))
-        .unwrap()
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            entry
-                .file_name()
-                .to_string_lossy()
-                .starts_with("pre-commit-snapshot")
-        })
-        .count();
-    assert_eq!(leftovers, 0, "取り出したディレクトリを残さない");
+    assert_eq!(
+        fs::read_dir(&scratch).unwrap().count(),
+        0,
+        "取り出したディレクトリを残さない"
+    );
 }
 
 #[test]
@@ -216,23 +214,58 @@ fn it_checks_files_marked_export_ignore() {
 fn it_lets_two_hooks_run_in_the_same_worktree_at_once() {
     // Git は、フックの実行中にインデックスをロックしない。同じワークツリーで、フックが重なることがある
     let dir = new_repo("concurrent");
-    write(
-        &dir,
-        ".agent/architecture/check.sh",
-        "#!/usr/bin/env bash\nsleep 2\ntest -f src/main.rs\n",
+    let sync = dir.join("sync");
+    fs::create_dir_all(&sync).expect("ディレクトリを作れる");
+    // 先に着いた方(`mkdir` に成功した方)は、もう一方が終わるまで、取り出し先の中で待つ。
+    // 待ち合わせはファイルで行うので、時間に頼らずに、確実に重なる
+    let script = format!(
+        "#!/usr/bin/env bash\n\
+         sync='{sync}'\n\
+         if mkdir \"$sync/first\" 2>/dev/null; then\n\
+         \x20 for _ in $(seq 300); do [ -e \"$sync/second-done\" ] && break; sleep 0.1; done\n\
+         \x20 [ -e \"$sync/second-done\" ] && test -f src/main.rs\n\
+         else\n\
+         \x20 test -f src/main.rs && touch \"$sync/second-done\"\n\
+         fi\n",
+        sync = sync.display()
     );
+    write(&dir, ".agent/architecture/check.sh", &script);
     executable(&dir.join(".agent/architecture/check.sh"));
+    ok(&dir, "git", &["add", ".agent/architecture/check.sh"]); // フックが実行するのは、ステージ済みの方
 
     let first = std::thread::spawn({
         let dir = dir.clone();
         move || hook(&dir, &[])
     });
-    std::thread::sleep(std::time::Duration::from_millis(700));
+    for _ in 0..600 {
+        if sync.join("first").exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert!(sync.join("first").exists(), "1つ目のフックが検査に着かない");
     let second = hook(&dir, &[]);
     let first = first.join().expect("スレッドが終わる");
 
     assert!(first.status.success(), "1つ目: {}", text(&first));
     assert!(second.status.success(), "2つ目: {}", text(&second));
+}
+
+#[test]
+fn it_checks_files_that_a_sparse_checkout_leaves_out() {
+    // skip-worktree のファイルは、作業ツリーに無いが、コミットには含まれる
+    let dir = new_repo("sparse");
+    ok(
+        &dir,
+        "git",
+        &["update-index", "--skip-worktree", "src/main.rs"],
+    );
+    fs::remove_file(dir.join("src/main.rs")).expect("消せる");
+    write(&dir, "notes.txt", "メモ\n");
+    ok(&dir, "git", &["add", "notes.txt"]);
+
+    let out = hook(&dir, &[]);
+    assert!(out.status.success(), "{}", text(&out));
 }
 
 #[test]
