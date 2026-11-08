@@ -53,9 +53,20 @@ impl StderrTail {
         let tail = Arc::new(Mutex::new(Tail::default()));
         let sink = tail.clone();
         let reader = tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                sink.lock().unwrap().push(&line);
+            // UTF-8 でない行でも読み続ける。止めるとパイプが詰まってサーバーが止まる
+            let mut reader = BufReader::new(stderr);
+            let mut buf = Vec::new();
+            loop {
+                buf.clear();
+                match reader.read_until(b'\n', &mut buf).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        let line = String::from_utf8_lossy(&buf);
+                        sink.lock()
+                            .unwrap()
+                            .push(line.trim_end_matches(['\n', '\r']));
+                    }
+                }
             }
         });
         Self { tail, reader }

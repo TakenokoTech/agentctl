@@ -33,3 +33,31 @@ fn an_empty_tail_is_empty() {
     assert!(tail.is_empty());
     assert_eq!(tail.text(), "");
 }
+
+#[tokio::test]
+async fn invalid_utf8_does_not_stop_the_reader() {
+    let mut child = tokio::process::Command::new("sh")
+        .args(["-c", r"printf 'before\n\377\376 bad\nafter\n' >&2"])
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let tail = StderrTail::start(child.stderr.take().unwrap());
+    child.wait().await.unwrap();
+    let msg = format!("{:#}", tail.explain(anyhow::anyhow!("boom")).await);
+    assert!(msg.contains("before"), "{msg}");
+    assert!(msg.contains("\u{fffd}\u{fffd} bad"), "{msg}");
+    assert!(msg.contains("after"), "{msg}");
+}
+
+#[tokio::test]
+async fn crlf_line_endings_are_trimmed() {
+    let mut child = tokio::process::Command::new("sh")
+        .args(["-c", r"printf 'one\r\ntwo\n' >&2"])
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let tail = StderrTail::start(child.stderr.take().unwrap());
+    child.wait().await.unwrap();
+    let msg = format!("{:#}", tail.explain(anyhow::anyhow!("boom")).await);
+    assert!(msg.ends_with("one\ntwo"), "{msg:?}");
+}
