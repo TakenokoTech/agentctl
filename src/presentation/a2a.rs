@@ -7,10 +7,12 @@ use serde_json::{Value, json};
 use crate::application::a2a as app;
 use crate::domain::a2a::{
     A2aConnector, AgentCard, MessageInfo, Reply, SendRequest, TaskEvent, TaskInfo, TaskState,
+    WatchEnd,
 };
 use crate::domain::config::A2aAgent;
 use crate::presentation::EXIT_TOOL_FAILED;
 use crate::presentation::cli::{A2aCmd, TaskCmd};
+use crate::presentation::output;
 
 pub async fn run<C: A2aConnector>(
     connector: &C,
@@ -49,29 +51,30 @@ pub async fn run<C: A2aConnector>(
         A2aCmd::Task {
             cmd: TaskCmd::Watch { id },
         } => {
-            let last = app::watch(connector, agent, &id, |ev| {
+            let end = app::watch(connector, agent, &id, |ev| {
                 emit(&event_json(ev, raw)).map(drop)
             })
             .await?;
-            watch_exit(last.as_ref())
+            watch_exit(end)
         }
     }
 }
 
-/// ストリームが閉じたときの終了コード。最後の状態がまだ進行中なら、完了を確認できていない。
-fn watch_exit(last: Option<&TaskState>) -> Result<ExitCode> {
-    match last {
-        Some(s) if s.is_settled() => Ok(exit_code(s)),
-        Some(s) => bail!(
-            "the stream closed before the task finished (last state: {})",
-            s.name()
+/// 終端状態に達したら、その状態に応じた終了コード。達する前にストリームが閉じたら、
+/// 入力待ちなどでサーバーがストリームを閉じた場合(`is_settled`)を除き、エラー(終了コード 1)。
+fn watch_exit(end: WatchEnd) -> Result<ExitCode> {
+    match end {
+        WatchEnd::Finished(state) => Ok(exit_code(&state)),
+        WatchEnd::Interrupted(Some(state)) if state.is_settled() => Ok(exit_code(&state)),
+        WatchEnd::Interrupted(last) => bail!(
+            "stream closed before the task finished (last state: {})",
+            last.as_ref().map_or("none", |s| s.name())
         ),
-        None => bail!("the stream closed before the task finished (no state received)"),
     }
 }
 
 fn emit(v: &impl Serialize) -> Result<ExitCode> {
-    println!("{}", serde_json::to_string(v)?);
+    output::line(serde_json::to_string(v)?)?;
     Ok(ExitCode::SUCCESS)
 }
 

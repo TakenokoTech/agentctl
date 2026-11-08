@@ -148,20 +148,35 @@ fn status_event_is_summarized() {
     );
 }
 
+// ---------- task watch の終了コード ----------
+
 #[test]
-fn watch_ending_in_a_settled_state_exits_by_that_state() {
-    let code = |s: &str| watch_exit(Some(&TaskState::new(s))).unwrap();
-    assert_eq!(code("completed"), ExitCode::SUCCESS);
-    assert_eq!(code("input_required"), ExitCode::SUCCESS);
-    assert_eq!(code("failed"), ExitCode::from(EXIT_TOOL_FAILED));
+fn watch_exit_follows_the_terminal_state() {
+    let finished = |s: &str| watch_exit(WatchEnd::Finished(TaskState::new(s))).unwrap();
+    assert_eq!(finished("completed"), ExitCode::SUCCESS);
+    assert_eq!(finished("canceled"), ExitCode::SUCCESS);
+    assert_eq!(finished("failed"), ExitCode::from(EXIT_TOOL_FAILED));
+    assert_eq!(finished("rejected"), ExitCode::from(EXIT_TOOL_FAILED));
 }
 
 #[test]
-fn watch_ending_before_a_settled_state_is_an_error() {
-    let err = watch_exit(None).unwrap_err().to_string();
-    assert!(err.contains("before the task finished"), "{err}");
-    let err = watch_exit(Some(&TaskState::new("working")))
-        .unwrap_err()
-        .to_string();
-    assert!(err.contains("working"), "{err}");
+fn watch_exit_is_an_error_when_the_stream_closed_early() {
+    let err = watch_exit(WatchEnd::Interrupted(Some(TaskState::new("working")))).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "stream closed before the task finished (last state: working)"
+    );
+    let err = watch_exit(WatchEnd::Interrupted(None)).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "stream closed before the task finished (last state: none)"
+    );
+}
+
+#[test]
+fn watch_exit_treats_a_stream_closed_while_waiting_for_input_as_settled() {
+    for name in ["input_required", "auth_required"] {
+        let end = WatchEnd::Interrupted(Some(TaskState::new(name)));
+        assert_eq!(watch_exit(end).unwrap(), ExitCode::SUCCESS, "{name}");
+    }
 }

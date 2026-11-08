@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use clap::{Parser, Subcommand};
 
@@ -25,8 +25,25 @@ pub struct Cli {
     /// Print full protocol responses instead of compact summaries
     #[arg(long, global = true)]
     pub raw: bool,
+    /// Give up on a connection or request after this many seconds (0 = no limit).
+    /// `a2a task watch` limits only the connection, since it runs until the task ends
+    #[arg(
+        long,
+        env = "AGENTCTL_TIMEOUT",
+        default_value_t = 60,
+        global = true,
+        value_name = "SECONDS"
+    )]
+    timeout: u64,
     #[command(subcommand)]
     pub cmd: Cmd,
+}
+
+impl Cli {
+    /// 接続とリクエストの制限時間。`0` は制限なし。
+    pub fn timeout(&self) -> Option<Duration> {
+        (self.timeout > 0).then(|| Duration::from_secs(self.timeout))
+    }
 }
 
 #[derive(Subcommand)]
@@ -68,6 +85,8 @@ pub enum A2aCmd {
     Card,
     /// Send a text message. Prints the reply message, or the task if one was created
     Send {
+        /// Message text. May start with `-`; use `--` before it to be explicit
+        #[arg(allow_hyphen_values = true)]
         text: String,
         /// Continue an existing conversation
         #[arg(long)]
@@ -90,7 +109,7 @@ pub enum A2aCmd {
 pub enum TaskCmd {
     /// Print the current task state
     Get { id: String },
-    /// Stream task updates as NDJSON until the server closes the stream
+    /// Stream task updates as NDJSON until the task reaches a final state
     Watch { id: String },
     /// Cancel a task
     Cancel { id: String },

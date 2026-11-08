@@ -22,6 +22,8 @@ async fn main() -> ExitCode {
     };
     match run(cli).await {
         Ok(code) => code,
+        // `| head` などで出力先が閉じられた。エラーではなく、静かに終える
+        Err(e) if presentation::output::is_closed_output(&e) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("error: {e:#}");
             ExitCode::from(1)
@@ -31,5 +33,12 @@ async fn main() -> ExitCode {
 
 async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     let cfg = infrastructure::config::load(&cli.config)?;
-    presentation::run(cli, &cfg, &RmcpConnector, &A2aRustConnector).await
+    let timeout = cli.timeout();
+    presentation::run(
+        cli,
+        &cfg,
+        &RmcpConnector::new(timeout),
+        &A2aRustConnector::new(timeout),
+    )
+    .await
 }

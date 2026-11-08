@@ -155,10 +155,11 @@ pub fn run_stdin(args: &[&str], input: &str) -> Out {
     finish(child.wait_with_output().unwrap())
 }
 
-/// stdin を開いたまま閉じずに実行し、`timeout` 内に終了するかを確かめる。
-pub fn run_with_open_stdin(args: &[&str], timeout: Duration) -> Out {
-    let mut child = command(config(), args)
-        .stdin(Stdio::piped())
+/// 実行し、`timeout` 内に終了するかを確かめる。超えたら強制終了して、テストを失敗にする。
+/// stdin は呼び出し側の指定に従い、`piped` なら閉じずに保つ。
+pub fn run_by(mut cmd: Command, timeout: Duration) -> Out {
+    let label = format!("{cmd:?}");
+    let mut child = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -171,7 +172,7 @@ pub fn run_with_open_stdin(args: &[&str], timeout: Duration) -> Out {
         }
         if start.elapsed() > timeout {
             child.kill().unwrap();
-            panic!("{args:?} は stdin を待って止まった");
+            panic!("{label} は {timeout:?} 以内に終了しなかった(止まっている)");
         }
         std::thread::sleep(Duration::from_millis(20));
     };
@@ -194,4 +195,18 @@ pub fn run_with_open_stdin(args: &[&str], timeout: Duration) -> Out {
         stdout,
         stderr,
     }
+}
+
+/// stdin を開いたまま閉じずに実行し、`timeout` 内に終了するかを確かめる。
+pub fn run_with_open_stdin(args: &[&str], timeout: Duration) -> Out {
+    let mut cmd = command(config(), args);
+    cmd.stdin(Stdio::piped());
+    run_by(cmd, timeout)
+}
+
+/// 設定ファイルを指定して実行し、`timeout` 内に終了するかを確かめる。
+pub fn run_with_deadline(config: &Path, args: &[&str], timeout: Duration) -> Out {
+    let mut cmd = command(config, args);
+    cmd.stdin(Stdio::null());
+    run_by(cmd, timeout)
 }

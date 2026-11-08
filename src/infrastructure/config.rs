@@ -45,7 +45,11 @@ fn read_token_with(
     lookup: impl Fn(&str) -> Option<String>,
 ) -> Result<Option<String>> {
     env.as_deref()
-        .map(|k| lookup(k).with_context(|| format!("env var {k} is not set")))
+        .map(|k| match lookup(k) {
+            None => anyhow::bail!("env var {k} is not set"),
+            Some(v) if v.is_empty() => anyhow::bail!("env var {k} is empty"),
+            Some(v) => Ok(v),
+        })
         .transpose()
 }
 

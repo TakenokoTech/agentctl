@@ -79,3 +79,21 @@ fn events_expose_state_only_when_they_carry_one() {
     assert_eq!(status.raw(), &json!("status"));
     assert_eq!(artifact.raw(), &json!("artifact"));
 }
+
+#[test]
+fn only_the_four_final_states_are_terminal() {
+    for name in ["completed", "failed", "canceled", "rejected"] {
+        assert!(TaskState::new(name).is_terminal(), "{name}");
+    }
+    // input_required / auth_required は、ユーザーの入力を待つ途中の状態
+    for name in [
+        "submitted",
+        "working",
+        "input_required",
+        "auth_required",
+        "unspecified",
+        "",
+    ] {
+        assert!(!TaskState::new(name).is_terminal(), "{name}");
+    }
+}

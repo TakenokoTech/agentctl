@@ -83,14 +83,63 @@ fn unknown_top_level_keys_are_rejected() {
     assert!(parse("[mpc.x]\ntransport = \"stdio\"\n").is_err());
 }
 
+// ---------- MCP サーバーの設定の検証(未知のキー、transport に合わないキー) ----------
+
+fn err(text: &str) -> String {
+    format!("{:#}", parse(text).unwrap_err())
+}
+
 #[test]
-fn unknown_mcp_server_keys_are_rejected() {
-    let http = "[mcp.x]\ntransport = \"http\"\nurl = \"https://x\"\ntoken_en = \"T\"\n";
-    assert!(parse(http).is_err(), "misspelled token_env");
-    let stdio = "[mcp.x]\ntransport = \"stdio\"\ncommand = [\"x\"]\nenvv = {}\n";
-    assert!(parse(stdio).is_err(), "misspelled env");
-    let mixed = "[mcp.x]\ntransport = \"stdio\"\ncommand = [\"x\"]\nurl = \"https://x\"\n";
-    assert!(parse(mixed).is_err(), "url belongs to http");
+fn a_misspelled_key_in_an_mcp_entry_is_rejected_and_named() {
+    let msg = err("[mcp.x]\ntransport = \"http\"\nurl = \"http://x\"\ntoken_en = \"T\"\n");
+    assert!(msg.contains("token_en"), "{msg}");
+}
+
+#[test]
+fn a_stdio_entry_rejects_http_only_keys() {
+    let msg = err("[mcp.x]\ntransport = \"stdio\"\ncommand = [\"a\"]\ntoken_env = \"T\"\n");
+    assert!(
+        msg.contains("`token_env`") && msg.contains("stdio"),
+        "{msg}"
+    );
+    let msg = err("[mcp.x]\ntransport = \"stdio\"\ncommand = [\"a\"]\nurl = \"http://x\"\n");
+    assert!(msg.contains("`url`") && msg.contains("stdio"), "{msg}");
+}
+
+#[test]
+fn an_http_entry_rejects_stdio_only_keys() {
+    let msg = err("[mcp.x]\ntransport = \"http\"\nurl = \"http://x\"\ncommand = [\"a\"]\n");
+    assert!(msg.contains("`command`") && msg.contains("http"), "{msg}");
+    let msg = err("[mcp.x]\ntransport = \"http\"\nurl = \"http://x\"\nenv = { A = \"b\" }\n");
+    assert!(msg.contains("`env`") && msg.contains("http"), "{msg}");
+}
+
+#[test]
+fn each_transport_requires_its_own_key() {
+    let msg = err("[mcp.x]\ntransport = \"stdio\"\n");
+    assert!(
+        msg.contains("`command`") && msg.contains("required"),
+        "{msg}"
+    );
+    let msg = err("[mcp.x]\ntransport = \"http\"\n");
+    assert!(msg.contains("`url`") && msg.contains("required"), "{msg}");
+}
+
+#[test]
+fn stdio_env_defaults_to_empty() {
+    let cfg = parse("[mcp.x]\ntransport = \"stdio\"\ncommand = [\"a\"]\n").unwrap();
+    match &cfg.mcp("x").unwrap().transport {
+        McpTransport::Stdio { env, .. } => assert!(env.is_empty()),
+        other => panic!("unexpected: {other:?}"),
+    }
+}
+
+// ---------- トークン ----------
+
+#[test]
+fn an_empty_variable_is_an_error_naming_it() {
+    let err = read_token_with(&Some("MY_TOKEN".into()), |_| Some(String::new())).unwrap_err();
+    assert_eq!(err.to_string(), "env var MY_TOKEN is empty");
 }
 
 #[test]

@@ -9,6 +9,7 @@ use crate::domain::config::McpServer;
 use crate::domain::mcp::{Content, JsonObject, McpConnector, ToolInfo, ToolOutput};
 use crate::presentation::EXIT_TOOL_FAILED;
 use crate::presentation::cli::McpCmd;
+use crate::presentation::output;
 
 pub async fn run<C: McpConnector>(
     connector: &C,
@@ -19,20 +20,20 @@ pub async fn run<C: McpConnector>(
     match cmd {
         McpCmd::Tools => {
             for t in app::list_tools(connector, server).await? {
-                println!("{}", tool_line(&t));
+                output::line(tool_line(&t))?;
             }
             Ok(ExitCode::SUCCESS)
         }
         McpCmd::Schema { tool } => {
             let t = app::tool_schema(connector, server, &tool).await?;
-            println!("{}", schema_json(&t));
+            output::line(schema_json(&t))?;
             Ok(ExitCode::SUCCESS)
         }
         McpCmd::Call { tool, args } => {
             let arguments = read_args(args).await?;
             let out = app::call_tool(connector, server, &tool, arguments).await?;
             for line in render_output(&out, raw) {
-                println!("{line}");
+                output::line(line)?;
             }
             Ok(exit_code(&out))
         }
@@ -68,7 +69,11 @@ fn parse_args(text: &str) -> Result<JsonObject> {
 
 fn tool_line(t: &ToolInfo) -> String {
     let desc = t.description.as_deref().unwrap_or("");
-    format!("{}\t{}", t.name, desc.lines().next().unwrap_or(""))
+    format!(
+        "{}\t{}",
+        output::tsv_field(&t.name),
+        output::tsv_field(desc.lines().next().unwrap_or(""))
+    )
 }
 
 fn schema_json(t: &ToolInfo) -> Value {

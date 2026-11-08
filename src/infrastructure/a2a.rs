@@ -1,28 +1,68 @@
+use std::time::Duration;
+
 use a2a_rust::{
     A2AClient, A2AClientConfig,
     types::{
-        AgentInterface, CancelTaskRequest, GetTaskRequest, Message, Part, Role,
-        SendMessageConfiguration, SendMessageRequest, SendMessageResponse, StreamResponse,
-        SubscribeToTaskRequest, Task, TaskState as WireState,
+        AgentInterface, CancelTaskRequest, GetTaskRequest, SendMessageConfiguration,
+        SendMessageRequest, SendMessageResponse, SubscribeToTaskRequest,
     },
 };
+
 use anyhow::Result;
 use futures_util::StreamExt;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 
 use crate::domain::a2a::{
-    A2aConnector, A2aSession, AgentCard, ArtifactInfo, EventStream, MessageInfo, Reply,
-    SendRequest, SkillInfo, TaskEvent, TaskInfo, TaskState,
+    A2aConnector, A2aSession, AgentCard, EventStream, Reply, SendRequest, SkillInfo, TaskInfo,
 };
 use crate::domain::config::A2aAgent;
 use crate::infrastructure::config::{ensure_secure_transport, read_token};
+use convert::{event_info, message_info, task_info, user_message};
 
-pub struct A2aRustConnector;
+pub struct A2aRustConnector {
+    timeout: Option<Duration>,
+}
+
+impl A2aRustConnector {
+    /// `timeout` は接続とリクエスト全体の制限時間。`None` なら制限しない。
+    pub fn new(timeout: Option<Duration>) -> Self {
+        Self { timeout }
+    }
+}
 
 pub struct A2aRustSession {
-    client: A2AClient,
+    /// 通常のリクエスト用。全体の制限時間を持つ。
+    request: A2AClient,
+    /// `watch` 用。タスクが終わるまで続くので、接続の制限時間だけを持つ。
+    stream: A2AClient,
+    timeout: Option<Duration>,
     /// トークンを持つときだけ、送信先を縛る基準になる設定済みの URL。
     token_origin: Option<String>,
+}
+
+fn client(
+    agent: &A2aAgent,
+    headers: HeaderMap,
+    timeout: Option<Duration>,
+    whole_request: bool,
+    has_token: bool,
+) -> Result<A2AClient> {
+    let mut http = reqwest::Client::builder().default_headers(headers);
+    if has_token {
+        // トークンを持つときは、設定した URL と同じオリジンへのリダイレクトだけを辿る
+        http = http.redirect(same_origin_redirects(&agent.url)?);
+    }
+    if let Some(limit) = timeout {
+        http = http.connect_timeout(limit);
+        if whole_request {
+            http = http.timeout(limit);
+        }
+    }
+    Ok(A2AClient::with_http_client(
+        &agent.url,
+        http.build()?,
+        A2AClientConfig::default(),
+    )?)
 }
 
 impl A2aConnector for A2aRustConnector {
@@ -32,24 +72,43 @@ impl A2aConnector for A2aRustConnector {
         let token = read_token(&agent.token_env)?;
         let has_token = token.is_some();
         ensure_secure_transport(&agent.url, has_token, agent.allow_insecure)?;
-        let mut builder = reqwest::Client::builder().default_headers(auth_headers(token)?);
-        if has_token {
-            builder = builder.redirect(same_origin_redirects(&agent.url)?);
-        }
-        let http = builder.build()?;
+        let headers = auth_headers(token)?;
         Ok(A2aRustSession {
-            client: A2AClient::with_http_client(&agent.url, http, A2AClientConfig::default())?,
+            request: client(agent, headers.clone(), self.timeout, true, has_token)?,
+            stream: client(agent, headers, self.timeout, false, has_token)?,
+            timeout: self.timeout,
             token_origin: has_token.then(|| agent.url.clone()),
         })
+    }
+}
+
+/// 制限時間の超過なら、制限時間と変更方法を示すエラーにする。
+fn explain_timeout(err: impl Into<anyhow::Error>, timeout: Option<Duration>) -> anyhow::Error {
+    let err = err.into();
+    let timed_out = err.chain().any(|cause| {
+        cause
+            .downcast_ref::<reqwest::Error>()
+            .is_some_and(reqwest::Error::is_timeout)
+    });
+    match (timed_out, timeout) {
+        (true, Some(limit)) => anyhow::anyhow!(
+            "timed out after {} (change it with --timeout)",
+            crate::infrastructure::timeout::describe(limit)
+        ),
+        _ => err,
     }
 }
 
 impl A2aRustSession {
     /// トークンを持つとき、カードが広告するエンドポイントが設定した URL と同じオリジンか確かめる。
     /// カードはクライアント内にキャッシュされ、続く送信先の選択も同じカードを使う。
-    async fn guard_token_origin(&self) -> Result<()> {
+    /// そのため、これから使うクライアントで確かめる。
+    async fn guard_token_origin(&self, client: &A2AClient) -> Result<()> {
         if let Some(base) = &self.token_origin {
-            let card = self.client.discover_agent_card().await?;
+            let card = client
+                .discover_agent_card()
+                .await
+                .map_err(|e| explain_timeout(e, self.timeout))?;
             ensure_same_origin(base, &card.supported_interfaces)?;
         }
         Ok(())
@@ -102,7 +161,11 @@ fn ensure_same_origin(base: &str, interfaces: &[AgentInterface]) -> Result<()> {
 
 impl A2aSession for A2aRustSession {
     async fn card(&self) -> Result<AgentCard> {
-        let card = self.client.discover_agent_card().await?;
+        let card = self
+            .request
+            .discover_agent_card()
+            .await
+            .map_err(|e| explain_timeout(e, self.timeout))?;
         Ok(AgentCard {
             name: card.name.clone(),
             description: card.description.clone(),
@@ -121,7 +184,7 @@ impl A2aSession for A2aRustSession {
     }
 
     async fn send(&self, req: SendRequest) -> Result<Reply> {
-        self.guard_token_origin().await?;
+        self.guard_token_origin(&self.request).await?;
         let req = SendMessageRequest {
             message: user_message(req.text, req.context_id, req.task_id),
             configuration: Some(SendMessageConfiguration {
@@ -131,41 +194,61 @@ impl A2aSession for A2aRustSession {
             metadata: None,
             tenant: None,
         };
-        Ok(match self.client.send_message(req).await? {
-            SendMessageResponse::Message(m) => Reply::Message(message_info(&m)?),
-            SendMessageResponse::Task(t) => Reply::Task(task_info(&t)?),
-        })
+        Ok(
+            match self
+                .request
+                .send_message(req)
+                .await
+                .map_err(|e| explain_timeout(e, self.timeout))?
+            {
+                SendMessageResponse::Message(m) => Reply::Message(message_info(&m)?),
+                SendMessageResponse::Task(t) => Reply::Task(task_info(&t)?),
+            },
+        )
     }
 
     async fn get_task(&self, id: &str) -> Result<TaskInfo> {
-        self.guard_token_origin().await?;
+        self.guard_token_origin(&self.request).await?;
         let req = GetTaskRequest {
             id: id.to_owned(),
             history_length: None,
             tenant: None,
         };
-        task_info(&self.client.get_task(req).await?)
+        task_info(
+            &self
+                .request
+                .get_task(req)
+                .await
+                .map_err(|e| explain_timeout(e, self.timeout))?,
+        )
     }
 
     async fn cancel_task(&self, id: &str) -> Result<TaskInfo> {
-        self.guard_token_origin().await?;
+        self.guard_token_origin(&self.request).await?;
         let req = CancelTaskRequest {
             id: id.to_owned(),
             tenant: None,
             metadata: None,
         };
-        task_info(&self.client.cancel_task(req).await?)
+        task_info(
+            &self
+                .request
+                .cancel_task(req)
+                .await
+                .map_err(|e| explain_timeout(e, self.timeout))?,
+        )
     }
 
     async fn watch(&self, id: &str) -> Result<EventStream> {
-        self.guard_token_origin().await?;
+        self.guard_token_origin(&self.stream).await?;
         let stream = self
-            .client
+            .stream
             .subscribe_to_task(SubscribeToTaskRequest {
                 id: id.to_owned(),
                 tenant: None,
             })
-            .await?;
+            .await
+            .map_err(|e| explain_timeout(e, self.timeout))?;
         Ok(Box::pin(stream.map(|ev| event_info(&ev?))))
     }
 }
@@ -180,93 +263,7 @@ fn auth_headers(token: Option<String>) -> Result<HeaderMap> {
     Ok(headers)
 }
 
-fn user_message(text: String, context_id: Option<String>, task_id: Option<String>) -> Message {
-    Message {
-        message_id: uuid::Uuid::new_v4().to_string(),
-        context_id,
-        task_id,
-        role: Role::User,
-        parts: vec![Part {
-            text: Some(text),
-            raw: None,
-            url: None,
-            data: None,
-            metadata: None,
-            filename: None,
-            media_type: None,
-        }],
-        metadata: None,
-        extensions: Vec::new(),
-        reference_task_ids: Vec::new(),
-    }
-}
-
-/// "TASK_STATE_INPUT_REQUIRED" -> "input_required"
-fn state_info(s: &WireState) -> TaskState {
-    let name = serde_json::to_value(s)
-        .ok()
-        .and_then(|v| {
-            v.as_str()
-                .map(|s| s.trim_start_matches("TASK_STATE_").to_ascii_lowercase())
-        })
-        .unwrap_or_default();
-    TaskState::new(name)
-}
-
-fn text_of(parts: &[Part]) -> String {
-    parts
-        .iter()
-        .filter_map(|p| p.text.as_deref())
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn message_info(m: &Message) -> Result<MessageInfo> {
-    Ok(MessageInfo {
-        context_id: m.context_id.clone(),
-        text: text_of(&m.parts),
-        raw: serde_json::to_value(m)?,
-    })
-}
-
-fn task_info(t: &Task) -> Result<TaskInfo> {
-    Ok(TaskInfo {
-        id: t.id.clone(),
-        context_id: t.context_id.clone(),
-        state: state_info(&t.status.state),
-        message: t.status.message.as_ref().map(|m| text_of(&m.parts)),
-        artifacts: t
-            .artifacts
-            .iter()
-            .map(|a| ArtifactInfo {
-                name: a.name.clone(),
-                text: text_of(&a.parts),
-            })
-            .collect(),
-        raw: serde_json::to_value(t)?,
-    })
-}
-
-fn event_info(ev: &StreamResponse) -> Result<TaskEvent> {
-    Ok(match ev {
-        StreamResponse::Task(t) => TaskEvent::Task(task_info(t)?),
-        StreamResponse::Message(m) => TaskEvent::Message(message_info(m)?),
-        StreamResponse::StatusUpdate(e) => TaskEvent::Status {
-            task_id: e.task_id.clone(),
-            state: state_info(&e.status.state),
-            message: e.status.message.as_ref().map(|m| text_of(&m.parts)),
-            raw: serde_json::to_value(ev)?,
-        },
-        StreamResponse::ArtifactUpdate(e) => TaskEvent::Artifact {
-            task_id: e.task_id.clone(),
-            name: e.artifact.name.clone(),
-            text: text_of(&e.artifact.parts),
-            append: e.append,
-            last_chunk: e.last_chunk,
-            raw: serde_json::to_value(ev)?,
-        },
-    })
-}
+mod convert;
 
 #[cfg(test)]
 mod tests;

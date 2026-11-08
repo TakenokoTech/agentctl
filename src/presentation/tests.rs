@@ -23,6 +23,19 @@ fn list_line_keeps_the_trailing_tab_for_an_empty_description() {
 }
 
 #[test]
+fn list_line_keeps_exactly_three_columns_when_the_description_has_tabs_and_newlines() {
+    let e = Entry {
+        kind: Kind::Mcp,
+        name: "x",
+        description: "first line\nsecond\tline",
+    };
+    let line = list_line(&e);
+    assert_eq!(line, "mcp\tx\tfirst line second line");
+    assert_eq!(line.matches('\t').count(), 2);
+    assert!(!line.contains('\n'));
+}
+
+#[test]
 fn usage_errors_exit_64_but_help_and_version_exit_0() {
     let code = |args: &[&str]| {
         let e = Cli::try_parse_from(std::iter::once("agentctl").chain(args.iter().copied()))

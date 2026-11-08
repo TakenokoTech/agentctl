@@ -88,3 +88,15 @@ fn raw_prints_the_protocol_response() {
     let out = output(Some(json!({"a": 1})), vec![]);
     assert_eq!(render_output(&out, true), vec![r#"{"raw":true}"#]);
 }
+
+#[test]
+fn tool_line_keeps_exactly_two_columns_when_the_description_has_tabs() {
+    let t = ToolInfo {
+        name: "echo".into(),
+        description: Some("Echo\tthe\tmessage\nsecond line".into()),
+        input_schema: Value::Null,
+    };
+    let line = tool_line(&t);
+    assert_eq!(line, "echo\tEcho the message");
+    assert_eq!(line.matches('\t').count(), 1);
+}

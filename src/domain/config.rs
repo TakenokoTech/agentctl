@@ -14,7 +14,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(from = "RawMcpServer")]
+#[serde(try_from = "RawMcpServer")]
 pub struct McpServer {
     pub description: Option<String>,
     pub transport: McpTransport,
@@ -34,51 +34,79 @@ pub enum McpTransport {
     },
 }
 
-/// 設定ファイル上の MCP サーバ。`flatten` では `deny_unknown_fields` が効かないため、
-/// キーを全部1か所に並べて未知のキーを弾き、`McpServer` に変換する。
+/// `transport` の値で、使えるキーが変わる。`flatten` では未知のキーを拒否できないため、
+/// すべてのキーを受け取ったうえで、`transport` に合うかを検証する。
 #[derive(Deserialize)]
-#[serde(tag = "transport", rename_all = "lowercase", deny_unknown_fields)]
-enum RawMcpServer {
-    Stdio {
-        description: Option<String>,
-        command: Vec<String>,
-        #[serde(default)]
-        env: BTreeMap<String, String>,
-    },
-    Http {
-        description: Option<String>,
-        url: String,
-        token_env: Option<String>,
-        #[serde(default)]
-        allow_insecure: bool,
-    },
+#[serde(deny_unknown_fields)]
+struct RawMcpServer {
+    description: Option<String>,
+    transport: TransportKind,
+    command: Option<Vec<String>>,
+    env: Option<BTreeMap<String, String>>,
+    url: Option<String>,
+    token_env: Option<String>,
+    allow_insecure: Option<bool>,
 }
 
-impl From<RawMcpServer> for McpServer {
-    fn from(raw: RawMcpServer) -> Self {
-        match raw {
-            RawMcpServer::Stdio {
-                description,
-                command,
-                env,
-            } => McpServer {
-                description,
-                transport: McpTransport::Stdio { command, env },
-            },
-            RawMcpServer::Http {
-                description,
-                url,
-                token_env,
-                allow_insecure,
-            } => McpServer {
-                description,
-                transport: McpTransport::Http {
-                    url,
-                    token_env,
-                    allow_insecure,
-                },
-            },
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+enum TransportKind {
+    Stdio,
+    Http,
+}
+
+impl TransportKind {
+    fn name(self) -> &'static str {
+        match self {
+            TransportKind::Stdio => "stdio",
+            TransportKind::Http => "http",
         }
+    }
+}
+
+fn reject<T>(kind: TransportKind, key: &str, value: &Option<T>) -> Result<(), String> {
+    match value {
+        Some(_) => Err(format!(
+            "`{key}` is not valid for transport = \"{}\"",
+            kind.name()
+        )),
+        None => Ok(()),
+    }
+}
+
+fn require<T>(kind: TransportKind, key: &str, value: Option<T>) -> Result<T, String> {
+    value.ok_or_else(|| format!("`{key}` is required for transport = \"{}\"", kind.name()))
+}
+
+impl TryFrom<RawMcpServer> for McpServer {
+    type Error = String;
+
+    fn try_from(raw: RawMcpServer) -> Result<Self, String> {
+        let kind = raw.transport;
+        let transport = match kind {
+            TransportKind::Stdio => {
+                reject(kind, "url", &raw.url)?;
+                reject(kind, "token_env", &raw.token_env)?;
+                reject(kind, "allow_insecure", &raw.allow_insecure)?;
+                McpTransport::Stdio {
+                    command: require(kind, "command", raw.command)?,
+                    env: raw.env.unwrap_or_default(),
+                }
+            }
+            TransportKind::Http => {
+                reject(kind, "command", &raw.command)?;
+                reject(kind, "env", &raw.env)?;
+                McpTransport::Http {
+                    url: require(kind, "url", raw.url)?,
+                    token_env: raw.token_env,
+                    allow_insecure: raw.allow_insecure.unwrap_or(false),
+                }
+            }
+        };
+        Ok(McpServer {
+            description: raw.description,
+            transport,
+        })
     }
 }
 
