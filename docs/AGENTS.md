@@ -4,7 +4,7 @@
 
 ## 構成
 
-- `README.md`: 入口。インストール、最小のクイックスタート、`docs/` へのリンクだけを書く。
+- `README.md`: 入口。インストール、最小のクイックスタート、MCP クライアントの設定例、`docs/` へのリンクだけを書く。
 - `docs/index.md`: 紹介ページ。特徴、実行例、AI エージェントからの使い方。
 - `docs/manual/`: マニュアル。使い方、設定、リファレンス、開発。
 - `docs/adr/`: 意思決定の記録(ADR)。書き方は `.agent/decision/SKILL.md` と `docs/adr/template.md` に従う。

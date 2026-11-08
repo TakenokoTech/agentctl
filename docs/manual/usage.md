@@ -36,3 +36,42 @@ echo '{"message":"from stdin"}' | agentctl mcp demo call echo --args -
 ## Long-running A2A tasks
 
 `send --no-wait` returns as soon as the A2A agent accepts the task. Follow up with `task get`, `task watch`, or `task cancel`. Task states are printed in short snake case, for example `input_required`; to answer a task in that state, run `send` again with `--task-id`.
+
+## Running as an MCP server
+
+`agentctl-mcp` starts an MCP server on stdio, so an MCP client can use `agentctl` without a shell. It is a separate program: for every tool call it runs `agentctl` and returns the result, and it does not depend on `agentctl`'s internals. It is installed together with `agentctl` by `cargo install --path .`.
+
+```json
+{
+  "mcpServers": {
+    "agentctl": {
+      "command": "agentctl-mcp",
+      "env": { "AGENTCTL_CONFIG": "/path/to/agentctl.toml" }
+    }
+  }
+}
+```
+
+| Environment variable | Description |
+|---|---|
+| `AGENTCTL_BIN` | Path to `agentctl`. Defaults to `agentctl` on the `PATH`. |
+| `AGENTCTL_CONFIG` | Config file for `agentctl` (see [Options](#options)). The server passes its environment to `agentctl`. |
+
+Each command is a tool. The arguments are the command's arguments, and `raw` is accepted wherever the CLI accepts `--raw`.
+
+| Tool | Same as | Arguments |
+|---|---|---|
+| `list` | `list` | none |
+| `mcp_tools` | `mcp <server> tools` | `server` |
+| `mcp_schema` | `mcp <server> schema <tool>` | `server`, `tool` |
+| `mcp_call` | `mcp <server> call <tool>` | `server`, `tool`, `args` (object), `raw` |
+| `a2a_card` | `a2a <agent> card` | `agent`, `raw` |
+| `a2a_send` | `a2a <agent> send <text>` | `agent`, `text`, `context_id`, `task_id`, `no_wait`, `raw` |
+| `a2a_task_get` | `a2a <agent> task get <id>` | `agent`, `id`, `raw` |
+| `a2a_task_cancel` | `a2a <agent> task cancel <id>` | `agent`, `id`, `raw` |
+
+The result text is the output of `agentctl`. The result is marked as an error (`isError`) whenever `agentctl` exits with a non-zero code: for exit code `2` the text is the tool's or task's output, and for exit code `1` it is the message that starts with `error: `. If `agentctl` cannot be started, the text also starts with `error: `.
+
+Missing, unknown, or mistyped arguments are rejected as protocol errors, and so are `server`, `tool`, `agent`, and `id` values that are empty or start with `-`, so a tool argument can never be read as an option of `agentctl`.
+
+`a2a task watch` is not available because a tool call returns a single result. Poll `a2a_task_get` instead.

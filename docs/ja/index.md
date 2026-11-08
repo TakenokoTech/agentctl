@@ -30,6 +30,7 @@ echo: hi
 - **段階的な開示**: `list` → `tools` → `schema` → `call` と進むので、必要な定義だけが AI エージェントに届く
 - **既定は簡潔な出力**: 一覧は TSV、それ以外は1行の JSON。`--raw` でプロトコルの応答をそのまま出力
 - 「呼び方が悪い」と「ツールが失敗した」を区別できる**終了コード**
+- **MCP クライアントからも使える**: `agentctl-mcp` が、各コマンドを stdio の MCP ツールとして公開する
 - **長時間の A2A タスク**: 待たずに送信し、あとから `get`、`watch`(NDJSON で流す)、`cancel`
 
 ## 実行例
@@ -97,7 +98,7 @@ Exit code 2 means the tool or task itself failed; 1 means the call could not be 
 
 マニュアルは英語のみです。
 
-- [Usage](../manual/usage.md): コマンド、オプション、ツールの引数の渡し方
+- [Usage](../manual/usage.md): コマンド、オプション、ツールの引数の渡し方、MCP サーバーとしての利用
 - [Configuration](../manual/configuration.md): 設定ファイルと認証
 - [Reference](../manual/reference.md): 終了コード、トラブルシューティング、既知の制限
 - [Development](../manual/development.md): ビルド、テスト、コード構成

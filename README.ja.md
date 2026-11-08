@@ -32,6 +32,8 @@ cd agentctl
 cargo install --path .
 ```
 
+これで2つのプログラムが入ります。`agentctl` と、MCP クライアントから `agentctl` を使うための MCP サーバー `agentctl-mcp` です([MCP クライアントから使う](#mcp-クライアントから使う) を参照)。
+
 ## クイックスタート
 
 リポジトリに含まれるテスト用 MCP サーバーをビルドし、`agentctl.toml` に記述します(コマンドはリポジトリのルートで実行します)。
@@ -57,6 +59,23 @@ agentctl mcp demo call echo --args '{"message":"hi"}'
 ```
 
 自分のサーバーやエージェントを使うには、[設定](docs/manual/configuration.md)(英語) に従って設定ファイルに追加します。
+
+## MCP クライアントから使う
+
+`agentctl-mcp` は、各コマンドを stdio の MCP ツールとして公開します。MCP クライアントは、シェルを使わずにこれらを呼べます。クライアントの MCP 設定(`mcp.json` や `.mcp.json` など)に追加します。
+
+```json
+{
+  "mcpServers": {
+    "agentctl": {
+      "command": "agentctl-mcp",
+      "env": { "AGENTCTL_CONFIG": "/path/to/agentctl.toml" }
+    }
+  }
+}
+```
+
+`agentctl-mcp` は、ツールを呼ぶたびに `agentctl` を実行します。そのため `agentctl` が `PATH` 上にあるか、`AGENTCTL_BIN` にそのパスを設定してください。使えるツールは [Usage](docs/manual/usage.md#running-as-an-mcp-server)(英語)にあります。
 
 ## ドキュメント
 

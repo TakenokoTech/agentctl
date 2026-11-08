@@ -30,6 +30,7 @@ The output above comes from the test servers used by this repository's test suit
 - **Progressive disclosure**: `list` → `tools` → `schema` → `call`, so only the needed definitions reach the AI agent
 - **Compact output by default**: TSV for listings, one-line JSON otherwise, and `--raw` for the full protocol response
 - **Distinct exit codes** that tell "bad invocation" apart from "the tool failed"
+- **Usable from MCP clients too**: `agentctl-mcp` exposes the commands as MCP tools over stdio
 - **Long-running A2A tasks**: send without waiting, then `get`, `watch` (streamed as NDJSON), or `cancel`
 
 ## Examples
@@ -95,7 +96,7 @@ Exit code 2 means the tool or task itself failed; 1 means the call could not be 
 
 ## Manual
 
-- [Usage](manual/usage.md): commands, options, and passing tool arguments
+- [Usage](manual/usage.md): commands, options, passing tool arguments, and running as an MCP server
 - [Configuration](manual/configuration.md): the config file and authentication
 - [Reference](manual/reference.md): exit codes, troubleshooting, and known limitations
 - [Development](manual/development.md): building, testing, and the code structure

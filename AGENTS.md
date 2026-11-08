@@ -13,7 +13,7 @@
 
 ## 構成
 
-DDD に沿った層構成。ルールは `.agent/architecture/SKILL.md` に従う。`src` の構成や依存を変えたら `.agent/architecture/check.sh` で検証する。
+`agentctl` のバイナリ(`src/` 直下)は DDD に沿った層構成。ルールは `.agent/architecture/SKILL.md` に従う。`src` の構成や依存を変えたら `.agent/architecture/check.sh` で検証する。`src/bin/agentctl-mcp/`(MCP ラッパー)は層構成の対象外で、`src/bin/agentctl-mcp/AGENTS.md` に従う。
 
 ## セットアップ
 
