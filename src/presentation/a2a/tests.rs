@@ -147,3 +147,21 @@ fn status_event_is_summarized() {
         json!({"type": "status", "taskId": "t1", "state": "input_required", "message": "need more"})
     );
 }
+
+#[test]
+fn watch_ending_in_a_settled_state_exits_by_that_state() {
+    let code = |s: &str| watch_exit(Some(&TaskState::new(s))).unwrap();
+    assert_eq!(code("completed"), ExitCode::SUCCESS);
+    assert_eq!(code("input_required"), ExitCode::SUCCESS);
+    assert_eq!(code("failed"), ExitCode::from(EXIT_TOOL_FAILED));
+}
+
+#[test]
+fn watch_ending_before_a_settled_state_is_an_error() {
+    let err = watch_exit(None).unwrap_err().to_string();
+    assert!(err.contains("before the task finished"), "{err}");
+    let err = watch_exit(Some(&TaskState::new("working")))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("working"), "{err}");
+}

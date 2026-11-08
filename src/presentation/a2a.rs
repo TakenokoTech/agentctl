@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -53,8 +53,20 @@ pub async fn run<C: A2aConnector>(
                 emit(&event_json(ev, raw)).map(drop)
             })
             .await?;
-            Ok(last.as_ref().map_or(ExitCode::SUCCESS, exit_code))
+            watch_exit(last.as_ref())
         }
+    }
+}
+
+/// ストリームが閉じたときの終了コード。最後の状態がまだ進行中なら、完了を確認できていない。
+fn watch_exit(last: Option<&TaskState>) -> Result<ExitCode> {
+    match last {
+        Some(s) if s.is_settled() => Ok(exit_code(s)),
+        Some(s) => bail!(
+            "the stream closed before the task finished (last state: {})",
+            s.name()
+        ),
+        None => bail!("the stream closed before the task finished (no state received)"),
     }
 }
 
