@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# コミット前の機械検査。1つでも失敗したらコミットを中止する。
+#
+# 検査するのは、作業ツリーではなく、これからコミットされる(ステージ済みの)内容。
+# ステージ済みのツリーを別ディレクトリに取り出して検査するので、作業ツリーは書き換えない。
+# 部分的なステージ(`git add -p`、`git commit <paths>`、`git commit -a`)にも対応する。
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel)
+# 実行ごとに別のディレクトリにする。Git はフックの実行中にインデックスをロックしないので、
+# 同じワークツリーで複数のフックが重なっても、互いの取り出し先を消さない
+# リポジトリの外に作る(内側だと、cargo が親の Cargo.toml をワークスペースとして探してしまう)
+snapshot=$(mktemp -d "${TMPDIR:-/tmp}/agentctl-pre-commit.XXXXXX")
+trap 'rm -rf "$snapshot"' EXIT
+# インデックスの内容をそのまま取り出す(`git archive` は export-ignore のファイルを除く)。
+# sparse checkout で作業ツリーに無いファイル(skip-worktree)も、コミットには含まれるので取り出す。
+# `git commit <paths>` などでは、フックに専用のインデックスが渡され、それに従う
+git checkout-index --all --ignore-skip-worktree-bits --prefix="$snapshot/"
+
+# 取り出した先は Git のリポジトリではない。フックの環境変数が残っていると、cargo などが混乱する
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
+cd "$snapshot"
+
+# 依存のビルド成果物は、作業ツリーの target を使い回す(毎回の全ビルドを避ける)
+export CARGO_TARGET_DIR="$root/target"
+
+# ステージ済みの Cargo.lock が Cargo.toml と食い違っていたら、失敗にする。
+# 以降の検査より先に行う(`--locked` のない cargo が、取り出した先の Cargo.lock を書き換えてしまうため)
+cargo metadata --locked --format-version 1 >/dev/null
+.agent/architecture/check.sh
+cargo fmt --check
+cargo clippy --quiet --locked -- -D warnings
+cargo test --quiet --locked
