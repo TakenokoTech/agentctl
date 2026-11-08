@@ -24,10 +24,10 @@ echo: hi
 
 ## インストール
 
-`agentctl` は crates.io には公開していません。Rust 1.85 以降でソースからビルドします。
+`agentctl` は crates.io には公開していません。Rust 1.89 以降でソースからビルドします。
 
 ```sh
-git clone <this repository>
+git clone https://github.com/TakenokoTech/agentctl.git
 cd agentctl
 cargo install --path .
 ```
