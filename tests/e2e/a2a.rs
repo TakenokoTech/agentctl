@@ -257,3 +257,104 @@ fn a2a_does_not_send_the_token_to_an_endpoint_on_another_origin() {
         "{requests:?}"
     );
 }
+
+/// 受けたリクエストの1行目を `seen` に送り、`handler(1行目)` が返す応答を返すサーバ。
+fn serve(handler: impl Fn(&str) -> String + Send + 'static) -> (String, mpsc::Receiver<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let mut stream = stream.unwrap();
+            let mut request = Vec::new();
+            let mut buf = [0u8; 1024];
+            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                let n = stream.read(&mut buf).unwrap();
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buf[..n]);
+            }
+            let text = String::from_utf8_lossy(&request).to_lowercase();
+            tx.send(text.clone()).ok();
+            let line = text.lines().next().unwrap_or("").to_owned();
+            stream.write_all(handler(&line).as_bytes()).unwrap();
+        }
+    });
+    (format!("http://{addr}"), rx)
+}
+
+fn redirect_to(location: &str) -> String {
+    format!(
+        "HTTP/1.1 302 Found\r\nlocation: {location}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+    )
+}
+
+fn json_response(body: &str) -> String {
+    format!(
+        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+fn card_with_token(url: &str, token: bool) -> Out {
+    let token_line = if token {
+        "token_env = \"AGENTCTL_E2E_TOKEN\"\n"
+    } else {
+        ""
+    };
+    let path = write_config(
+        &format!("redirect-{}", url.replace([':', '/'], "_")),
+        &format!("[a2a.t]\nurl = \"{url}\"\n{token_line}"),
+    );
+    finish(
+        command(&path, &["a2a", "t", "card"])
+            .env("AGENTCTL_E2E_TOKEN", "s3cret")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap(),
+    )
+}
+
+#[test]
+fn a2a_with_a_token_does_not_follow_a_redirect_to_another_origin() {
+    let (other, other_seen) = serve(|_| json_response(&crate::common::card_advertising("")));
+    let target = format!("{other}/.well-known/agent-card.json");
+    let (url, _) = serve(move |_| redirect_to(&target));
+    let out = card_with_token(&url, true);
+    assert_eq!(out.code, 1, "{}", out.stderr);
+    assert!(out.stderr.contains("origin"), "{}", out.stderr);
+    assert!(
+        other_seen.try_recv().is_err(),
+        "the other origin was contacted"
+    );
+}
+
+#[test]
+fn a2a_with_a_token_follows_a_redirect_on_the_same_origin() {
+    let (url, seen) = serve(|line| {
+        if line.contains("/moved") {
+            json_response(&crate::common::card_advertising(""))
+        } else {
+            redirect_to("/moved")
+        }
+    });
+    let out = card_with_token(&url, true);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    let requests: Vec<String> = seen.try_iter().collect();
+    assert!(
+        requests
+            .iter()
+            .all(|r| r.contains("authorization: bearer s3cret")),
+        "{requests:?}"
+    );
+}
+
+#[test]
+fn a2a_without_a_token_still_follows_a_redirect_to_another_origin() {
+    let (other, _) = serve(|_| json_response(&crate::common::card_advertising("")));
+    let target = format!("{other}/.well-known/agent-card.json");
+    let (url, _) = serve(move |_| redirect_to(&target));
+    let out = card_with_token(&url, false);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+}

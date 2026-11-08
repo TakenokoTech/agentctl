@@ -32,9 +32,11 @@ impl A2aConnector for A2aRustConnector {
         let token = read_token(&agent.token_env)?;
         let has_token = token.is_some();
         ensure_secure_transport(&agent.url, has_token, agent.allow_insecure)?;
-        let http = reqwest::Client::builder()
-            .default_headers(auth_headers(token)?)
-            .build()?;
+        let mut builder = reqwest::Client::builder().default_headers(auth_headers(token)?);
+        if has_token {
+            builder = builder.redirect(same_origin_redirects(&agent.url)?);
+        }
+        let http = builder.build()?;
         Ok(A2aRustSession {
             client: A2AClient::with_http_client(&agent.url, http, A2AClientConfig::default())?,
             token_origin: has_token.then(|| agent.url.clone()),
@@ -52,6 +54,31 @@ impl A2aRustSession {
         }
         Ok(())
     }
+}
+
+/// リダイレクト先が `base` と同じオリジン(スキーム、ホスト、ポート)か。
+/// reqwest はスキームだけが変わるリダイレクトでは Authorization を外さないため、自前で判断する。
+fn redirect_allowed(next: &reqwest::Url, base: &reqwest::Url) -> bool {
+    next.origin() == base.origin()
+}
+
+/// トークンを持つときのリダイレクト方針。設定した URL と同じオリジンへのものだけ辿る。
+fn same_origin_redirects(base: &str) -> Result<reqwest::redirect::Policy> {
+    const MAX_REDIRECTS: usize = 10;
+    let base = reqwest::Url::parse(base)?;
+    Ok(reqwest::redirect::Policy::custom(move |attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            attempt.error("too many redirects")
+        } else if redirect_allowed(attempt.url(), &base) {
+            attempt.follow()
+        } else {
+            let msg = format!(
+                "refusing to follow a redirect to a different origin ({}) with a token",
+                attempt.url()
+            );
+            attempt.error(msg)
+        }
+    }))
 }
 
 /// クライアントが使うバインディングのエンドポイントが、すべて `base` と同じオリジンにあるか。
