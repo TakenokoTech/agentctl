@@ -15,14 +15,12 @@
 
 DDD に沿った層構成。ルールは `.agent/architecture/SKILL.md` に従う。`src` の構成や依存を変えたら `.agent/architecture/check.sh` で検証する。
 
-## 開発コマンド
+## セットアップ
+
+クローン後に一度、フックを有効にする。
 
 ```sh
-cargo build            # ビルド
-cargo run              # 実行
-cargo test             # テスト
-cargo fmt              # フォーマット
-cargo clippy           # lint
+git config core.hooksPath .agent/hooks
 ```
 
 ## 注意事項
