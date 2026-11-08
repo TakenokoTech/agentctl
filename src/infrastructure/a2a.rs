@@ -172,7 +172,8 @@ impl A2aSession for A2aRustSession {
                 id: id.to_owned(),
                 tenant: None,
             })
-            .await?;
+            .await
+            .map_err(|e| explain_timeout(e, self.timeout))?;
         Ok(Box::pin(stream.map(|ev| event_info(&ev?))))
     }
 }
