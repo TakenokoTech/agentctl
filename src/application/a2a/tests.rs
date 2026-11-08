@@ -1,9 +1,9 @@
 use anyhow::anyhow;
-use futures_util::stream;
+use futures_util::{StreamExt, stream};
 use serde_json::Value;
 
 use super::*;
-use crate::domain::a2a::{EventStream, MessageInfo};
+use crate::domain::a2a::{EventStream, MessageInfo, TaskState};
 
 struct FakeConnector;
 struct FakeSession;
@@ -74,6 +74,13 @@ impl A2aSession for FakeSession {
         let events = match id {
             "broken" => vec![Ok(status("working")), Err(anyhow!("stream broke"))],
             "silent" => vec![],
+            "early" => vec![Ok(status("working"))],
+            // 終端状態のあと、ストリームを閉じないサーバー
+            "lingers" => {
+                let events = stream::iter(vec![Ok(status("working")), Ok(status("completed"))]);
+                return Ok(Box::pin(events.chain(stream::pending())));
+            }
+            "extra" => vec![Ok(status("completed")), Ok(status("working"))],
             _ => vec![
                 Ok(status("working")),
                 Ok(TaskEvent::Artifact {
@@ -152,24 +159,59 @@ async fn connect_failure_is_propagated() {
 }
 
 #[tokio::test]
-async fn watch_reports_every_event_and_the_last_state() {
+async fn watch_reports_every_event_and_finishes_at_the_terminal_state() {
     let mut seen = 0;
-    let last = watch(&FakeConnector, &agent("ok"), "t", |_| {
+    let end = watch(&FakeConnector, &agent("ok"), "t", |_| {
         seen += 1;
         Ok(())
     })
     .await
     .unwrap();
     assert_eq!(seen, 3);
-    assert_eq!(last, Some(TaskState::new("completed")));
+    assert_eq!(end, WatchEnd::Finished(TaskState::new("completed")));
 }
 
 #[tokio::test]
-async fn watch_without_events_has_no_state() {
-    let last = watch(&FakeConnector, &agent("ok"), "silent", |_| Ok(()))
+async fn watch_does_not_wait_for_the_server_to_close_the_stream() {
+    let end = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        watch(&FakeConnector, &agent("ok"), "lingers", |_| Ok(())),
+    )
+    .await
+    .expect("watch must return at the terminal state");
+    assert_eq!(
+        end.unwrap(),
+        WatchEnd::Finished(TaskState::new("completed"))
+    );
+}
+
+#[tokio::test]
+async fn watch_ignores_events_after_the_terminal_state() {
+    let mut seen = 0;
+    let end = watch(&FakeConnector, &agent("ok"), "extra", |_| {
+        seen += 1;
+        Ok(())
+    })
+    .await
+    .unwrap();
+    assert_eq!(seen, 1);
+    assert_eq!(end, WatchEnd::Finished(TaskState::new("completed")));
+}
+
+#[tokio::test]
+async fn watch_reports_an_interrupted_stream_with_its_last_state() {
+    let end = watch(&FakeConnector, &agent("ok"), "early", |_| Ok(()))
         .await
         .unwrap();
-    assert_eq!(last, None);
+    assert_eq!(end, WatchEnd::Interrupted(Some(TaskState::new("working"))));
+}
+
+#[tokio::test]
+async fn watch_without_events_is_interrupted_with_no_state() {
+    let end = watch(&FakeConnector, &agent("ok"), "silent", |_| Ok(()))
+        .await
+        .unwrap();
+    assert_eq!(end, WatchEnd::Interrupted(None));
 }
 
 #[tokio::test]

@@ -147,3 +147,28 @@ fn status_event_is_summarized() {
         json!({"type": "status", "taskId": "t1", "state": "input_required", "message": "need more"})
     );
 }
+
+// ---------- task watch の終了コード ----------
+
+#[test]
+fn watch_exit_follows_the_terminal_state() {
+    let finished = |s: &str| watch_exit(WatchEnd::Finished(TaskState::new(s))).unwrap();
+    assert_eq!(finished("completed"), ExitCode::SUCCESS);
+    assert_eq!(finished("canceled"), ExitCode::SUCCESS);
+    assert_eq!(finished("failed"), ExitCode::from(EXIT_TOOL_FAILED));
+    assert_eq!(finished("rejected"), ExitCode::from(EXIT_TOOL_FAILED));
+}
+
+#[test]
+fn watch_exit_is_an_error_when_the_stream_closed_early() {
+    let err = watch_exit(WatchEnd::Interrupted(Some(TaskState::new("working")))).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "stream closed before the task finished (last state: working)"
+    );
+    let err = watch_exit(WatchEnd::Interrupted(None)).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "stream closed before the task finished (last state: none)"
+    );
+}

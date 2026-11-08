@@ -18,12 +18,17 @@ agentctl [OPTIONS] <COMMAND>
 | `a2a <agent> task watch <id>` | Stream state changes until the task ends | NDJSON |
 | `a2a <agent> task cancel <id>` | Cancel a task | JSON |
 
+In TSV output, tabs and newlines inside a description are replaced with a single space, so each entry stays on one line.
+
+The text of `a2a send` may start with `-` (for example `agentctl a2a helper send "-1 is the answer"`).
+
 ## Options
 
 | Option | Description |
 |---|---|
 | `--config <PATH>` | Config file path. Defaults to `agentctl.toml`. Can also be set with `AGENTCTL_CONFIG`. |
 | `--raw` | Print the full protocol response instead of a compact summary. |
+| `--timeout <SECONDS>` | Give up on a connection or request after this many seconds. Defaults to `60`; `0` means no limit. Can also be set with `AGENTCTL_TIMEOUT`. Does not apply to `a2a task watch`. |
 
 ## Passing tool arguments
 
@@ -36,6 +41,8 @@ echo '{"message":"from stdin"}' | agentctl mcp demo call echo --args -
 ## Long-running A2A tasks
 
 `send --no-wait` returns as soon as the A2A agent accepts the task. Follow up with `task get`, `task watch`, or `task cancel`. Task states are printed in short snake case, for example `input_required`; to answer a task in that state, run `send` again with `--task-id`.
+
+`task watch` prints each event and stops when the task reaches a final state (`completed`, `failed`, `canceled`, or `rejected`), even if the agent keeps the stream open. The exit code follows that state: `0`, except `2` for `failed` and `rejected`. If the stream closes before the task reaches a final state, the events received so far are printed and the command exits with `1`.
 
 ## Running as an MCP server
 

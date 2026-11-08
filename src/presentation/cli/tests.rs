@@ -116,3 +116,92 @@ fn missing_required_arguments_are_rejected() {
     assert!(parse(&["a2a", "ag", "send"]).is_err());
     assert!(parse(&["a2a", "ag", "task", "get"]).is_err());
 }
+
+// ---------- `-` で始まるテキスト ----------
+
+fn send_text(args: &[&str]) -> Result<(String, bool), clap::Error> {
+    let mut all = vec!["a2a", "ag", "send"];
+    all.extend_from_slice(args);
+    match parse(&all)?.cmd {
+        Cmd::A2a {
+            cmd: A2aCmd::Send { text, no_wait, .. },
+            ..
+        } => Ok((text, no_wait)),
+        _ => panic!("expected `a2a send`"),
+    }
+}
+
+#[test]
+fn text_starting_with_a_hyphen_is_accepted_as_the_text() {
+    assert_eq!(
+        send_text(&["-1 is the answer"]).unwrap(),
+        ("-1 is the answer".to_owned(), false)
+    );
+    assert_eq!(
+        send_text(&["--not a flag"]).unwrap(),
+        ("--not a flag".to_owned(), false)
+    );
+}
+
+#[test]
+fn a_double_dash_still_separates_the_text() {
+    assert_eq!(
+        send_text(&["--no-wait", "--", "--config=/x"]).unwrap(),
+        ("--config=/x".to_owned(), true)
+    );
+}
+
+#[test]
+fn known_flags_are_still_flags_before_or_after_the_text() {
+    assert_eq!(
+        send_text(&["--no-wait", "hi"]).unwrap(),
+        ("hi".to_owned(), true)
+    );
+    assert_eq!(
+        send_text(&["hi", "--no-wait"]).unwrap(),
+        ("hi".to_owned(), true)
+    );
+}
+
+#[test]
+fn a_flag_is_not_swallowed_as_the_text_when_the_text_is_missing() {
+    assert!(send_text(&["--no-wait"]).is_err());
+    assert!(send_text(&["--context-id", "c"]).is_err());
+}
+
+// ---------- --timeout ----------
+
+#[test]
+fn timeout_defaults_to_60_seconds() {
+    // AGENTCTL_TIMEOUT が環境に設定されていると既定値を検証できない
+    if std::env::var_os("AGENTCTL_TIMEOUT").is_some() {
+        return;
+    }
+    assert_eq!(
+        parse(&["list"]).unwrap().timeout(),
+        Some(Duration::from_secs(60))
+    );
+}
+
+#[test]
+fn timeout_takes_seconds_before_or_after_the_subcommand() {
+    assert_eq!(
+        parse(&["--timeout", "5", "list"]).unwrap().timeout(),
+        Some(Duration::from_secs(5))
+    );
+    assert_eq!(
+        parse(&["list", "--timeout", "7"]).unwrap().timeout(),
+        Some(Duration::from_secs(7))
+    );
+}
+
+#[test]
+fn a_timeout_of_zero_disables_the_limit() {
+    assert_eq!(parse(&["--timeout", "0", "list"]).unwrap().timeout(), None);
+}
+
+#[test]
+fn a_timeout_that_is_not_a_number_of_seconds_is_rejected() {
+    assert!(parse(&["--timeout", "soon", "list"]).is_err());
+    assert!(parse(&["--timeout", "-1", "list"]).is_err());
+}

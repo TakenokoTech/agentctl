@@ -8,7 +8,7 @@ use a2a_rust::{
     server::{A2AHandler, A2AStream},
     types::*,
 };
-use futures_util::stream;
+use futures_util::{StreamExt, stream};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -117,6 +117,35 @@ impl A2AHandler for TestAgent {
             self.tasks.lock().unwrap().insert(id, task.clone());
             return Ok(SendMessageResponse::Task(task));
         }
+        // "drop ...": 終端状態に達しないまま、watch のストリームだけ閉じる
+        // "linger ...": すぐ完了するが、終端状態のあとも watch のストリームを閉じない
+        if text.starts_with("drop") || text.starts_with("linger") {
+            let mode = if text.starts_with("drop") {
+                "drop"
+            } else {
+                "linger"
+            };
+            let id = uuid::Uuid::new_v4().to_string();
+            let task = Task {
+                id: id.clone(),
+                context_id: Some(context_id),
+                status: status(TaskState::Working),
+                artifacts: Vec::new(),
+                history: vec![req.message],
+                metadata: serde_json::json!({ "mode": mode }).as_object().cloned(),
+            };
+            self.tasks.lock().unwrap().insert(id.clone(), task.clone());
+            if mode == "linger" {
+                let tasks = self.tasks.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    if let Some(t) = tasks.lock().unwrap().get_mut(&id) {
+                        t.status = status(TaskState::Completed);
+                    }
+                });
+            }
+            return Ok(SendMessageResponse::Task(task));
+        }
         if !text.starts_with("slow") {
             return Ok(SendMessageResponse::Message(Message {
                 message_id: uuid::Uuid::new_v4().to_string(),
@@ -175,6 +204,16 @@ impl A2AHandler for TestAgent {
     /// 現在の Task を1回流し、その後は状態が変わるたびに StatusUpdate を流す。終端で閉じる
     async fn subscribe_to_task(&self, req: SubscribeToTaskRequest) -> Result<A2AStream, A2AError> {
         let first = self.snapshot(&req.id)?;
+        let mode = first
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("mode"))
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        if mode.as_deref() == Some("drop") {
+            let only_snapshot = stream::iter(vec![StreamResponse::Task(first)]);
+            return Ok(Box::pin(only_snapshot));
+        }
         let agent = self.clone();
         let init = (Some(first.clone()), first.status.state, false);
         let s = stream::unfold(
@@ -203,6 +242,9 @@ impl A2AHandler for TestAgent {
                 }
             },
         );
+        if mode.as_deref() == Some("linger") {
+            return Ok(Box::pin(s.chain(stream::pending())));
+        }
         Ok(Box::pin(s))
     }
 }

@@ -1,6 +1,7 @@
 pub mod a2a;
 pub mod cli;
 pub mod mcp;
+pub mod output;
 
 use std::process::ExitCode;
 
@@ -23,7 +24,7 @@ pub async fn run<M: McpConnector, A: A2aConnector>(
     match cli.cmd {
         Cmd::List => {
             for e in cfg.entries() {
-                println!("{}", list_line(&e));
+                output::line(list_line(&e))?;
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -33,7 +34,12 @@ pub async fn run<M: McpConnector, A: A2aConnector>(
 }
 
 fn list_line(e: &Entry) -> String {
-    format!("{}\t{}\t{}", e.kind.as_str(), e.name, e.description)
+    format!(
+        "{}\t{}\t{}",
+        e.kind.as_str(),
+        output::tsv_field(e.name),
+        output::tsv_field(e.description)
+    )
 }
 
 #[cfg(test)]

@@ -19,6 +19,14 @@ impl TaskState {
         &self.0
     }
 
+    /// これ以上変わらない最終の状態か。`input_required` などは、入力を待つ途中の状態で含まない。
+    pub fn is_terminal(&self) -> bool {
+        matches!(
+            self.0.as_str(),
+            "completed" | "failed" | "canceled" | "rejected"
+        )
+    }
+
     /// 処理が失敗した状態か。
     pub fn is_failure(&self) -> bool {
         matches!(self.0.as_str(), "failed" | "rejected")
@@ -117,6 +125,15 @@ impl TaskEvent {
             TaskEvent::Status { raw, .. } | TaskEvent::Artifact { raw, .. } => raw,
         }
     }
+}
+
+/// `task watch` の終わり方。
+#[derive(Debug, PartialEq)]
+pub enum WatchEnd {
+    /// 終端状態に達した。
+    Finished(TaskState),
+    /// 終端状態に達する前に、ストリームが閉じた。最後に観測した状態を持つ。
+    Interrupted(Option<TaskState>),
 }
 
 pub type EventStream = Pin<Box<dyn Stream<Item = Result<TaskEvent>>>>;

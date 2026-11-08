@@ -7,7 +7,9 @@ use std::{
     time::Duration,
 };
 
-use crate::common::{Out, a2a_url, command, finish, run, run_with, write_config};
+use crate::common::{
+    Out, a2a_url, command, finish, run, run_with, run_with_open_stdin, write_config,
+};
 
 fn task_id(out: &Out) -> String {
     out.json()["id"].as_str().unwrap().to_owned()
@@ -186,4 +188,63 @@ fn a2a_sends_the_token_from_env_as_a_bearer_header() {
         request.contains("authorization: bearer s3cret"),
         "{request}"
     );
+}
+
+#[test]
+fn a2a_empty_token_env_exits_1() {
+    let path = write_config(
+        "empty-token",
+        &format!(
+            "[a2a.t]\nurl = \"{}\"\ntoken_env = \"AGENTCTL_E2E_EMPTY_TOKEN\"\n",
+            a2a_url()
+        ),
+    );
+    let out = finish(
+        command(&path, &["a2a", "t", "card"])
+            .env("AGENTCTL_E2E_EMPTY_TOKEN", "")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(out.code, 1);
+    assert!(
+        out.stderr
+            .contains("env var AGENTCTL_E2E_EMPTY_TOKEN is empty"),
+        "{}",
+        out.stderr
+    );
+}
+
+#[test]
+fn a2a_send_accepts_text_that_starts_with_a_hyphen() {
+    let out = run(&["a2a", "test", "send", "-1 is the answer"]);
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.json()["text"], "echo: -1 is the answer");
+}
+
+#[test]
+fn a2a_watch_exits_1_when_the_stream_closes_before_the_task_finishes() {
+    let id = task_id(&run(&["a2a", "test", "send", "drop it", "--no-wait"]));
+    let out = run(&["a2a", "test", "task", "watch", &id]);
+    assert_eq!(out.code, 1);
+    // 届いたイベントは出力される
+    assert_eq!(out.json_lines().first().unwrap()["state"], "working");
+    assert!(
+        out.stderr
+            .contains("stream closed before the task finished (last state: working)"),
+        "{}",
+        out.stderr
+    );
+}
+
+#[test]
+fn a2a_watch_returns_at_the_terminal_state_even_if_the_server_keeps_the_stream_open() {
+    let id = task_id(&run(&["a2a", "test", "send", "linger it", "--no-wait"]));
+    // 修正前は、サーバーがストリームを閉じないので戻らない。止まったら失敗にする
+    let out = run_with_open_stdin(
+        &["a2a", "test", "task", "watch", &id],
+        std::time::Duration::from_secs(15),
+    );
+    assert_eq!(out.code, 0, "{}", out.stderr);
+    assert_eq!(out.json_lines().last().unwrap()["state"], "completed");
 }
